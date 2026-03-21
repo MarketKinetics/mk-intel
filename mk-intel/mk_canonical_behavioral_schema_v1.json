@@ -1,0 +1,738 @@
+{
+  "schema_version": "1.0",
+  "schema_name": "mk_canonical_behavioral_schema",
+  "design": "SaaS-first, B2C, e-commerce secondary, banking B2C supported",
+  "compliance_mode": "standard",
+  "compliance_mode_values": ["standard", "banking_us", "banking_eu", "eu_gdpr"],
+  "description": "Internal behavioral schema for MK Intel proprietary data ingestion. All company data is normalized to this structure before processing. Missing fields are null. Coverage score is computed automatically during ingestion and drives confidence scoring downstream.",
+
+  "ingestion_rules": {
+    "age_binning": "If 'age' is present, it is automatically binned into 'age_bin' using ACS-aligned bins: 18-24, 25-34, 35-44, 45-54, 55-64, 65+. If both 'age' and 'age_bin' are present, raw 'age' takes precedence and 'age_bin' is recomputed.",
+    "income_binning": "If 'income_annual' is present, it is automatically binned into 'income_tier' using ACS-aligned bins: 0-19k, 20-49k, 50-99k, 100-199k, 200k+. If both are present, 'income_annual' takes precedence.",
+    "non_us_customers": "If 'country' is present and not 'US', structural BTA mapping is skipped. Fields 'bta_mapping' and 'mapping_method' are set to null and 'skipped_non_us' respectively. Behavioral signals are still processed and stored but flagged as outside the BTA reference frame.",
+    "list_fields": "Fields typed as 'list' (content_categories, top_themes, pain_points, motivations, product_categories_purchased, cross_sell_products) are serialized as comma-separated strings for ChromaDB metadata compatibility. Original list form is preserved in the parquet output.",
+    "text_signals": "The text_signals domain is a placeholder for Phase 1.2b. LLM extraction pipeline not yet implemented. Populate manually or leave null. Schema is forward-compatible.",
+    "txt_files": ".txt files are assumed to be tab-separated. This is a convention, not true format detection. If the source file uses a different delimiter, rename it or pass sep= explicitly.",
+    "field_roles": "Fields are typed as raw (provided by company), derived (auto-computed during ingestion), or accepted_either (company may provide either form). See field-level 'role' property."
+  },
+
+  "privacy": {
+    "description": "Compliance-informed product guardrails for MK Intel ingestion. These are engineering constraints, not formal legal determinations. Always consult qualified legal counsel for jurisdiction-specific compliance decisions.",
+    "compliance_modes": {
+      "standard": {
+        "description": "Default mode. All non-protected fields may be used for clustering.",
+        "clustering_excluded": []
+      },
+      "banking_us": {
+        "description": "US banking and financial services. Informed by ECOA, FCRA, and Fair Housing Act. gender, age_bin, zip_code excluded from clustering inputs. credit_score_tier is descriptor-only in all modes.",
+        "clustering_excluded": ["gender", "age_bin", "zip_code", "credit_score_tier"]
+      },
+      "banking_eu": {
+        "description": "EU banking. Informed by GDPR Article 9 and EU anti-discrimination directives. gender, age_bin, zip_code, marital_status excluded from clustering inputs. credit_score_tier is descriptor-only in all modes.",
+        "clustering_excluded": ["gender", "age_bin", "zip_code", "marital_status", "credit_score_tier"]
+      },
+      "eu_gdpr": {
+        "description": "EU general compliance. Informed by GDPR broadly. gender and zip_code excluded from clustering inputs.",
+        "clustering_excluded": ["gender", "zip_code"]
+      }
+    },
+    "never_collect": [
+      "race_eth",
+      "religion",
+      "disability_status",
+      "sexual_orientation",
+      "genetic_data",
+      "political_opinions"
+    ],
+    "never_collect_notes": "These fields are never collected from business data under any compliance mode. race_eth appears only as a BTA population descriptor derived from ACS census data — never from individual customer records.",
+    "descriptor_only_all_modes": [
+      "credit_score_tier",
+      "dominant_race_eth"
+    ],
+    "descriptor_only_notes": "descriptor_only fields are ingested, stored, and visible in BTA cards and TAAW output but are never used as clustering inputs in any compliance mode.",
+    "zip_code_policy": "zip_code is permitted for clustering in standard and eu_gdpr modes. In banking_us and banking_eu modes it is ingested and stored but excluded from clustering inputs due to disparate impact risk. Flagged in compliance_excluded_fields in coverage output."
+  },
+
+  "domains": {
+
+    "identity": {
+      "description": "Who the customer is. Structural fields used for BTA structural mapping.",
+      "tier": 1,
+      "bta_mapping_weights": {
+        "notes": "Relative weights for structural BTA matching. Do not need to sum to 1.0 — normalized at runtime based on which fields are present. Minimum structural coverage for bta_eligible = normalized weight >= 0.35.",
+        "age_bin":        0.40,
+        "income_tier":    0.40,
+        "housing_tenure": 0.10,
+        "education":      0.10,
+        "marital_status": 0.10
+      },
+      "fields": {
+        "customer_id": {
+          "type": "string",
+          "role": "raw",
+          "required": true,
+          "notes": "Internal customer identifier. Never exposed externally. Must be unique per record."
+        },
+        "age": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "notes": "Age in years. Automatically binned to age_bin during ingestion. Range: 18-120.",
+          "privacy": {
+            "excluded_clustering_modes": ["banking_us", "banking_eu"],
+            "allowed_modes": ["standard", "eu_gdpr"]
+          }
+        },
+        "age_bin": {
+          "type": "string",
+          "role": "accepted_either",
+          "required": false,
+          "notes": "ACS-aligned age bin. Values: 18-24, 25-34, 35-44, 45-54, 55-64, 65+. Auto-populated from age if age is present. If provided directly, used as-is.",
+          "privacy": {
+            "excluded_clustering_modes": ["banking_us", "banking_eu"],
+            "allowed_modes": ["standard", "eu_gdpr"]
+          }
+        },
+        "gender": {
+          "type": "string",
+          "role": "raw",
+          "required": false,
+          "notes": "Values: Male, Female, Other, Unknown.",
+          "privacy": {
+            "excluded_clustering_modes": ["banking_us", "banking_eu", "eu_gdpr"],
+            "allowed_modes": ["standard"]
+          }
+        },
+        "income_annual": {
+          "type": "float",
+          "role": "raw",
+          "required": false,
+          "notes": "Annual individual income in USD. Automatically binned to income_tier during ingestion.",
+          "privacy": {
+            "excluded_clustering_modes": [],
+            "allowed_modes": ["standard", "banking_us", "banking_eu", "eu_gdpr"]
+          }
+        },
+        "income_tier": {
+          "type": "string",
+          "role": "accepted_either",
+          "required": false,
+          "notes": "ACS-aligned income tier. Values: 0-19k, 20-49k, 50-99k, 100-199k, 200k+. Auto-populated from income_annual if present.",
+          "privacy": {
+            "excluded_clustering_modes": [],
+            "allowed_modes": ["standard", "banking_us", "banking_eu", "eu_gdpr"]
+          }
+        },
+        "education": {
+          "type": "string",
+          "role": "raw",
+          "required": false,
+          "notes": "Values: HS_or_less, Some_college, Bachelor, Graduate.",
+          "privacy": {
+            "excluded_clustering_modes": [],
+            "allowed_modes": ["standard", "banking_us", "banking_eu", "eu_gdpr"]
+          }
+        },
+        "marital_status": {
+          "type": "string",
+          "role": "raw",
+          "required": false,
+          "notes": "Values: Married, Never_Married, Previously_Married.",
+          "privacy": {
+            "excluded_clustering_modes": ["banking_eu"],
+            "allowed_modes": ["standard", "banking_us", "eu_gdpr"]
+          }
+        },
+        "housing_tenure": {
+          "type": "string",
+          "role": "raw",
+          "required": false,
+          "notes": "Values: Owner, Renter, Other.",
+          "privacy": {
+            "excluded_clustering_modes": [],
+            "allowed_modes": ["standard", "banking_us", "banking_eu", "eu_gdpr"]
+          }
+        },
+        "zip_code": {
+          "type": "string",
+          "role": "raw",
+          "required": false,
+          "notes": "5-digit US ZIP code. Used for geographic clustering where permitted. See zip_code_policy in privacy block.",
+          "privacy": {
+            "excluded_clustering_modes": ["banking_us", "banking_eu"],
+            "allowed_modes": ["standard", "eu_gdpr"]
+          }
+        },
+        "country": {
+          "type": "string",
+          "role": "raw",
+          "required": false,
+          "notes": "ISO 3166-1 alpha-2 country code. Default: US. Non-US records skip BTA structural mapping.",
+          "privacy": {
+            "excluded_clustering_modes": [],
+            "allowed_modes": ["standard", "banking_us", "banking_eu", "eu_gdpr"]
+          }
+        },
+        "customer_since": {
+          "type": "date",
+          "role": "raw",
+          "required": false,
+          "notes": "First purchase or subscription date. ISO 8601 format.",
+          "privacy": {
+            "excluded_clustering_modes": [],
+            "allowed_modes": ["standard", "banking_us", "banking_eu", "eu_gdpr"]
+          }
+        }
+      }
+    },
+
+    "behavioral": {
+      "description": "How the customer behaves on the platform. Core signals for BTA behavioral refinement.",
+      "tier": 1,
+      "fields": {
+        "sessions_last_7d": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "notes": "Number of app or web sessions in the last 7 days."
+        },
+        "sessions_last_30d": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "notes": "Number of app or web sessions in the last 30 days."
+        },
+        "sessions_last_90d": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "notes": "Number of app or web sessions in the last 90 days."
+        },
+        "last_active_date": {
+          "type": "date",
+          "role": "raw",
+          "required": false,
+          "notes": "Most recent session date. ISO 8601. Used to compute days_since_active if not provided."
+        },
+        "days_since_active": {
+          "type": "integer",
+          "role": "accepted_either",
+          "required": false,
+          "notes": "Days elapsed since last session. Auto-computed from last_active_date if not provided directly."
+        },
+        "feature_adoption_count": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "notes": "Number of distinct product features used by this customer."
+        },
+        "feature_adoption_tier": {
+          "type": "string",
+          "role": "accepted_either",
+          "required": false,
+          "notes": "Values: low, medium, high. Can be provided directly or derived from feature_adoption_count."
+        },
+        "nps_score": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "notes": "Raw NPS survey response from this individual customer. Range: 0-10. This is NOT an aggregated score — it is the single response value submitted by this customer in the most recent NPS survey. Auto-derives nps_tier if not provided."
+        },
+        "nps_tier": {
+          "type": "string",
+          "role": "accepted_either",
+          "required": false,
+          "notes": "Derived from nps_score: detractor (0-6), passive (7-8), promoter (9-10). Can be provided directly if nps_score is unavailable."
+        },
+        "support_tickets_total": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "notes": "Total support tickets submitted by this customer over their lifetime."
+        },
+        "support_tickets_90d": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "notes": "Support tickets submitted in the last 90 days. Used as a friction signal in TAAW scoring."
+        },
+        "cancellation_attempts": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "notes": "Number of cancellation or downgrade attempts recorded. Strong churn risk signal."
+        },
+        "digital_banking_sessions_30d": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "sector": "banking",
+          "notes": "Banking. Number of app or online banking sessions in last 30 days. Digital adoption signal."
+        },
+        "branch_visits_90d": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "sector": "banking",
+          "notes": "Banking. Number of physical branch visits in last 90 days. Declining values indicate digital migration."
+        },
+        "atm_transactions_30d": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "sector": "banking",
+          "notes": "Banking. Number of ATM transactions in last 30 days. Cash usage pattern signal."
+        },
+        "mobile_deposit_active": {
+          "type": "boolean",
+          "role": "raw",
+          "required": false,
+          "sector": "banking",
+          "notes": "Banking. Whether customer has used mobile deposit in the last 90 days. Digital adoption signal."
+        }
+      }
+    },
+
+    "transactional": {
+      "description": "What the customer buys and pays. Revenue, purchase, and e-commerce signals.",
+      "tier": 1,
+      "fields": {
+        "subscription_plan": {
+          "type": "string",
+          "role": "raw",
+          "required": false,
+          "notes": "Current subscription plan name or tier. Company-specific values."
+        },
+        "subscription_status": {
+          "type": "string",
+          "role": "raw",
+          "required": false,
+          "notes": "Values: active, cancelled, paused, trial, expired."
+        },
+        "mrr": {
+          "type": "float",
+          "role": "raw",
+          "required": false,
+          "notes": "Monthly recurring revenue from this customer in USD. SaaS primary field."
+        },
+        "arr": {
+          "type": "float",
+          "role": "raw",
+          "required": false,
+          "notes": "Annual recurring revenue from this customer in USD. SaaS primary field."
+        },
+        "ltv": {
+          "type": "float",
+          "role": "raw",
+          "required": false,
+          "notes": "Lifetime value in USD across all transactions."
+        },
+        "total_purchases": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "notes": "Total number of transactions over the customer lifetime."
+        },
+        "purchases_last_30d": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "notes": "Number of transactions in the last 30 days."
+        },
+        "purchases_last_90d": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "notes": "Number of transactions in the last 90 days."
+        },
+        "avg_order_value": {
+          "type": "float",
+          "role": "raw",
+          "required": false,
+          "notes": "Average transaction value in USD across all purchases."
+        },
+        "last_purchase_date": {
+          "type": "date",
+          "role": "raw",
+          "required": false,
+          "notes": "Most recent transaction date. ISO 8601. Used to compute days_since_purchase if not provided."
+        },
+        "days_since_purchase": {
+          "type": "integer",
+          "role": "accepted_either",
+          "required": false,
+          "notes": "Days elapsed since last transaction. Auto-computed from last_purchase_date if not provided directly."
+        },
+        "payment_failures_total": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "notes": "Lifetime count of payment failures. Involuntary churn risk signal."
+        },
+        "discount_usage_pct": {
+          "type": "float",
+          "role": "raw",
+          "required": false,
+          "notes": "Proportion of purchases using a discount code. Range: 0-1. High values may indicate price sensitivity."
+        },
+        "cart_abandonment_rate": {
+          "type": "float",
+          "role": "raw",
+          "required": false,
+          "notes": "E-commerce. Proportion of carts abandoned before purchase. Range: 0-1."
+        },
+        "product_categories_purchased": {
+          "type": "list",
+          "role": "raw",
+          "required": false,
+          "notes": "E-commerce. List of product category names purchased. Serialized as comma-separated string for ChromaDB. e.g. ['apparel', 'accessories', 'footwear']"
+        },
+        "return_rate": {
+          "type": "float",
+          "role": "raw",
+          "required": false,
+          "notes": "E-commerce. Proportion of purchased items returned. Range: 0-1."
+        },
+        "account_type": {
+          "type": "string",
+          "role": "raw",
+          "required": false,
+          "sector": "banking",
+          "notes": "Banking. Values: checking, savings, credit, mortgage, investment, other."
+        },
+        "account_status": {
+          "type": "string",
+          "role": "raw",
+          "required": false,
+          "sector": "banking",
+          "notes": "Banking. Values: active, dormant, delinquent, closed."
+        },
+        "credit_score_tier": {
+          "type": "string",
+          "role": "raw",
+          "required": false,
+          "sector": "banking",
+          "privacy": {
+            "descriptor_only": true,
+            "excluded_clustering_modes": ["standard", "banking_us", "banking_eu", "eu_gdpr"],
+            "notes": "Descriptor only in all modes — never a clustering input regardless of compliance mode. Visible in BTA cards and TAAW output only."
+          },
+          "notes": "Banking. Tier derived from credit score — never the raw score. Values: excellent (750+), good (700-749), fair (650-699), poor (<650)."
+        },
+        "overdraft_frequency_90d": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "sector": "banking",
+          "notes": "Banking. Number of overdraft events in last 90 days. Friction and financial stress signal."
+        },
+        "direct_deposit_active": {
+          "type": "boolean",
+          "role": "raw",
+          "required": false,
+          "sector": "banking",
+          "notes": "Banking. Whether customer has an active direct deposit. Strong engagement and retention signal."
+        },
+        "avg_monthly_balance": {
+          "type": "float",
+          "role": "raw",
+          "required": false,
+          "sector": "banking",
+          "notes": "Banking. Average monthly account balance in USD. Financial health signal."
+        },
+        "product_count": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "sector": "banking",
+          "notes": "Banking. Total number of bank products held (e.g. checking + savings + credit card = 3). Relationship depth signal."
+        },
+        "cross_sell_products": {
+          "type": "list",
+          "role": "raw",
+          "required": false,
+          "sector": "banking",
+          "notes": "Banking. List of product types held beyond primary account. Serialized as comma-separated string for ChromaDB. e.g. ['savings', 'credit_card', 'mortgage']"
+        }
+      }
+    },
+
+    "journey": {
+      "description": "Where the customer is in their lifecycle. Retention, churn, and growth signals.",
+      "tier": 2,
+      "fields": {
+        "lifecycle_stage": {
+          "type": "string",
+          "role": "accepted_either",
+          "required": false,
+          "notes": "Values: new, growing, mature, at_risk, churned, reactivated. Can be provided by the company or derived from behavioral and transactional signals."
+        },
+        "churn_risk_score": {
+          "type": "float",
+          "role": "raw",
+          "required": false,
+          "notes": "Company-provided churn propensity score. Range: 0-1. If not provided, derived from behavioral signals."
+        },
+        "churn_risk_tier": {
+          "type": "string",
+          "role": "accepted_either",
+          "required": false,
+          "notes": "Values: low, medium, high. Derived from churn_risk_score or provided directly."
+        },
+        "days_to_renewal": {
+          "type": "integer",
+          "role": "accepted_either",
+          "required": false,
+          "notes": "Days until next subscription renewal date. Auto-computed from renewal_date if not provided directly."
+        },
+        "renewal_date": {
+          "type": "date",
+          "role": "raw",
+          "required": false,
+          "notes": "Next renewal date. ISO 8601. Used to compute days_to_renewal if not provided."
+        },
+        "onboarding_completed": {
+          "type": "boolean",
+          "role": "raw",
+          "required": false,
+          "notes": "Whether the customer completed the onboarding flow."
+        },
+        "onboarding_completion_pct": {
+          "type": "float",
+          "role": "raw",
+          "required": false,
+          "notes": "Proportion of onboarding steps completed. Range: 0-1."
+        },
+        "upgrades_total": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "notes": "Number of plan upgrades over customer lifetime. Expansion signal."
+        },
+        "downgrades_total": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "notes": "Number of plan downgrades over customer lifetime. Contraction signal."
+        },
+        "referrals_made": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "notes": "Number of referrals submitted by this customer. Advocacy signal."
+        },
+        "delinquency_days": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "sector": "banking",
+          "privacy": {
+            "descriptor_only": false,
+            "excluded_clustering_modes": [],
+            "allowed_modes": ["standard", "banking_us", "banking_eu", "eu_gdpr"],
+            "notes": "Usable as clustering input in all modes. Treat as sensitive in banking_us — not a direct FCRA trigger but handle with care."
+          },
+          "notes": "Banking. Days past due on any product. 0 = current. Risk and churn signal."
+        },
+        "credit_limit_utilization": {
+          "type": "float",
+          "role": "raw",
+          "required": false,
+          "sector": "banking",
+          "notes": "Banking. Credit utilization ratio for credit products. Range: 0-1. High values indicate financial stress."
+        },
+        "loan_to_value_ratio": {
+          "type": "float",
+          "role": "raw",
+          "required": false,
+          "sector": "banking",
+          "notes": "Banking. Loan-to-value ratio for mortgage customers. Range: 0-1+."
+        }
+      }
+    },
+
+    "engagement": {
+      "description": "How the customer interacts with communications and content.",
+      "tier": 2,
+      "fields": {
+        "email_open_rate": {
+          "type": "float",
+          "role": "raw",
+          "required": false,
+          "notes": "Proportion of marketing emails opened. Range: 0-1."
+        },
+        "email_click_rate": {
+          "type": "float",
+          "role": "raw",
+          "required": false,
+          "notes": "Proportion of marketing emails clicked. Range: 0-1."
+        },
+        "push_opt_in": {
+          "type": "boolean",
+          "role": "raw",
+          "required": false,
+          "notes": "Whether the customer opted into push notifications."
+        },
+        "sms_opt_in": {
+          "type": "boolean",
+          "role": "raw",
+          "required": false,
+          "notes": "Whether the customer opted into SMS communications."
+        },
+        "preferred_channel": {
+          "type": "string",
+          "role": "accepted_either",
+          "required": false,
+          "notes": "Inferred or declared preferred communication channel. Values: email, push, sms, in_app."
+        },
+        "content_categories": {
+          "type": "list",
+          "role": "raw",
+          "required": false,
+          "notes": "Content categories this customer has engaged with. Company-specific tags. Serialized as comma-separated string for ChromaDB."
+        },
+        "last_email_open_date": {
+          "type": "date",
+          "role": "raw",
+          "required": false,
+          "notes": "Most recent email open date. ISO 8601."
+        },
+        "community_member": {
+          "type": "boolean",
+          "role": "raw",
+          "required": false,
+          "notes": "Whether the customer is an active member of a community or forum."
+        },
+        "reviews_submitted": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "notes": "Number of product or service reviews submitted by this customer."
+        },
+        "avg_review_score": {
+          "type": "float",
+          "role": "raw",
+          "required": false,
+          "notes": "Average score across all reviews submitted by this customer. Range: 1-5."
+        }
+      }
+    },
+
+    "text_signals": {
+      "description": "Pre-extracted signals from unstructured text. Placeholder for Phase 1.2b. LLM extraction pipeline not yet implemented. Populate manually or leave null. Schema is fully forward-compatible.",
+      "tier": 3,
+      "status": "placeholder",
+      "fields": {
+        "sentiment_overall": {
+          "type": "string",
+          "role": "derived",
+          "required": false,
+          "notes": "Values: positive, neutral, negative. Extracted from reviews or support tickets."
+        },
+        "sentiment_score": {
+          "type": "float",
+          "role": "derived",
+          "required": false,
+          "notes": "Sentiment polarity score. Range: -1 (very negative) to 1 (very positive)."
+        },
+        "top_themes": {
+          "type": "list",
+          "role": "derived",
+          "required": false,
+          "notes": "Dominant themes extracted from text sources. e.g. ['pricing', 'onboarding', 'feature_request']. Serialized as comma-separated string for ChromaDB."
+        },
+        "pain_points": {
+          "type": "list",
+          "role": "derived",
+          "required": false,
+          "notes": "Explicit pain points extracted from support tickets or reviews. Serialized as comma-separated string for ChromaDB."
+        },
+        "motivations": {
+          "type": "list",
+          "role": "derived",
+          "required": false,
+          "notes": "Explicit motivations extracted from text. e.g. ['save_time', 'reduce_cost']. Serialized as comma-separated string for ChromaDB."
+        },
+        "source_type": {
+          "type": "string",
+          "role": "raw",
+          "required": false,
+          "notes": "Values: review, support_ticket, social_post, survey_response, interview."
+        },
+        "source_count": {
+          "type": "integer",
+          "role": "raw",
+          "required": false,
+          "notes": "Number of text records this extraction was derived from."
+        },
+        "extraction_model": {
+          "type": "string",
+          "role": "derived",
+          "required": false,
+          "notes": "Model used for LLM extraction. e.g. claude-sonnet-4-6."
+        },
+        "extraction_date": {
+          "type": "date",
+          "role": "derived",
+          "required": false,
+          "notes": "Date the extraction was run. ISO 8601."
+        }
+      }
+    }
+
+  },
+
+  "coverage": {
+    "description": "Computed automatically during ingestion. Drives confidence scoring and BTA mapping quality downstream. Never provided by the company — always derived.",
+    "fields": {
+      "coverage_score": {
+        "type": "float",
+        "notes": "Overall proportion of non-null fields across all domains. Range: 0-1."
+      },
+      "identity_coverage": {
+        "type": "float",
+        "notes": "Coverage within the identity domain. Range: 0-1."
+      },
+      "behavioral_coverage": {
+        "type": "float",
+        "notes": "Coverage within the behavioral domain. Range: 0-1."
+      },
+      "transactional_coverage": {
+        "type": "float",
+        "notes": "Coverage within the transactional domain. Range: 0-1."
+      },
+      "journey_coverage": {
+        "type": "float",
+        "notes": "Coverage within the journey domain. Range: 0-1."
+      },
+      "engagement_coverage": {
+        "type": "float",
+        "notes": "Coverage within the engagement domain. Range: 0-1."
+      },
+      "structural_fields_present": {
+        "type": "list",
+        "notes": "Which identity fields are present for this record. Determines structural mapping quality."
+      },
+      "structural_weight_coverage": {
+        "type": "float",
+        "notes": "Normalized sum of relative weights for present structural fields. Range: 0-1. bta_eligible requires this >= 0.35."
+      },
+      "confidence_tier": {
+        "type": "string",
+        "notes": "Derived from coverage_score. Values: low (<0.3), medium (0.3-0.6), high (>0.6)."
+      },
+      "bta_eligible": {
+        "type": "boolean",
+        "notes": "True if country is US (or null) AND structural_weight_coverage >= 0.35. False for non-US records or records with insufficient identity coverage."
+      },
+      "compliance_mode": {
+        "type": "string",
+        "notes": "Active compliance mode for this ingestion run. Values: standard, banking_us, banking_eu, eu_gdpr."
+      },
+      "compliance_excluded_fields": {
+        "type": "list",
+        "notes": "Fields excluded from clustering due to active compliance_mode. Ingested and stored but not used as clustering inputs."
+      }
+    }
+  }
+}
