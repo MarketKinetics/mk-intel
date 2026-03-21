@@ -1,0 +1,600 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "mk_taaw_schema_v2",
+  "title": "Target Audience Analysis Worksheet",
+  "description": "MK canonical schema for a single TA analyzed against a single SOBJ",
+  "type": "object",
+  "required": ["meta", "header", "effectiveness", "conditions", "vulnerabilities", "susceptibility", "accessibility", "narrative_and_actions", "assessment", "traceability"],
+
+  "properties": {
+
+    "meta": {
+      "type": "object",
+      "description": "Document-level metadata",
+      "required": ["schema_version", "document_id", "created_at", "status"],
+      "properties": {
+        "schema_version":  { "type": "string", "const": "2.0" },
+        "document_id":     { "type": "string", "description": "e.g. TAAW-OBJ01-SOBJ02-TA03" },
+        "created_at":      { "type": "string", "format": "date" },
+        "last_updated":    { "type": "string", "format": "date" },
+        "status":          { "type": "string", "enum": ["draft", "review", "approved"] },
+        "analyst":         { "type": "string" },
+        "context_notes":   { "type": "string" }
+      }
+    },
+
+    "header": {
+      "type": "object",
+      "description": "Objective chain and audience identification",
+      "required": ["objective", "supporting_objective", "target_audience"],
+      "properties": {
+
+        "objective": {
+          "type": "object",
+          "required": ["id", "statement"],
+          "properties": {
+            "id":        { "type": "string" },
+            "statement": {
+              "type": "string",
+              "description": "Verb + Object only. Must NOT contain audience reference.",
+              "examples": ["Reduce premium subscription churn", "Increase social media page popularity"]
+            }
+          }
+        },
+
+        "supporting_objective": {
+          "type": "object",
+          "required": ["id", "statement", "direction"],
+          "properties": {
+            "id":        { "type": "string" },
+            "statement": {
+              "type": "string",
+              "description": "TA placeholder + Verb + Object. Audience is placeholder until selection.",
+              "examples": ["[TA] renews subscription at next billing cycle"]
+            },
+            "direction": {
+              "type": "string",
+              "enum": ["increase", "decrease", "maintain", "initiate", "stop"],
+              "description": "Direction of desired behavior change. Drives assessment logic."
+            }
+          }
+        },
+
+        "target_audience": {
+          "type": "object",
+          "required": ["id", "definition", "actor_type"],
+          "properties": {
+            "id":          { "type": "string" },
+            "definition":  { "type": "string", "description": "Specific, bounded description of the segment" },
+            "actor_type":  {
+              "type": "string",
+              "enum": ["primary", "secondary"],
+              "description": "Primary: directly performs behavior. Secondary: influences primary."
+            },
+            "audience_size_estimate": {
+              "type": "object",
+              "properties": {
+                "value":      { "type": "number" },
+                "unit":       { "type": "string", "enum": ["individuals", "households", "organizations", "percentage_of_market"] },
+                "confidence": { "type": "string", "enum": ["low", "medium", "high"] },
+                "source":     { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "effectiveness": {
+      "type": "object",
+      "description": "Can this TA perform the desired behavior? Evaluated against the SOBJ.",
+      "required": ["desired_behavior", "authority_power_control", "restrictions", "sobj_impact", "rating", "rating_rationale"],
+      "properties": {
+
+        "desired_behavior": {
+          "type": "object",
+          "required": ["statement", "is_specific", "is_observable", "is_measurable"],
+          "properties": {
+            "statement":      { "type": "string", "description": "Single, concrete action. Not a general disposition." },
+            "is_specific":    { "type": "boolean" },
+            "is_observable":  { "type": "boolean", "description": "Can an external observer detect it?" },
+            "is_measurable":  { "type": "boolean", "description": "Can the action be counted or quantified?" }
+          }
+        },
+
+        "authority_power_control": {
+          "type": "object",
+          "required": ["decision_rights", "influence_over_others", "resource_access"],
+          "properties": {
+            "decision_rights":       { "type": "string", "description": "What the TA can autonomously decide or do" },
+            "influence_over_others": { "type": "string", "description": "Who else the TA affects or moves" },
+            "resource_access":       { "type": "string", "description": "Time, money, permissions, tools available" }
+          }
+        },
+
+        "restrictions": {
+          "type": "array",
+          "description": "Constraints that may prevent the TA from performing the desired behavior",
+          "items": {
+            "type": "object",
+            "required": ["type", "description", "inhibits_behavior"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["legal", "economic", "social_cultural", "platform_access", "physical_environmental", "political_regulatory", "security_safety"]
+              },
+              "description":       { "type": "string" },
+              "inhibits_behavior": { "type": "boolean", "description": "Does this restriction actually block the desired behavior?" },
+              "severity":          { "type": "string", "enum": ["low", "medium", "high"] }
+            }
+          }
+        },
+
+        "sobj_impact": {
+          "type": "object",
+          "required": ["description"],
+          "properties": {
+            "description":           { "type": "string", "description": "Why this TA matters to SOBJ accomplishment" },
+            "estimated_contribution": { "type": "string", "description": "Quantified or qualified impact estimate, if available" }
+          }
+        },
+
+        "rating":          { "type": "integer", "minimum": 0, "maximum": 5 },
+        "rating_rationale":{ "type": "string" },
+
+        "gate_pass": {
+          "type": "boolean",
+          "description": "Auto-derived: rating > 2. If false, analysis should stop here."
+        }
+      }
+    },
+
+    "conditions": {
+      "type": "object",
+      "description": "Current state analysis. Why does the TA behave as it does today?",
+      "required": ["current_behavior", "external_conditions", "internal_conditions", "positive_consequences", "negative_consequences", "secondary_consequences"],
+      "properties": {
+
+        "current_behavior": {
+          "type": "object",
+          "required": ["statement", "is_specific", "is_observable", "is_measurable"],
+          "properties": {
+            "statement":      { "type": "string", "description": "What the TA does now. Single action, specific." },
+            "is_specific":    { "type": "boolean" },
+            "is_observable":  { "type": "boolean" },
+            "is_measurable":  { "type": "boolean" }
+          }
+        },
+
+        "external_conditions": {
+          "type": "array",
+          "description": "Situations or events outside the TA that cause the current behavior",
+          "items": { "$ref": "#/definitions/condition_item" }
+        },
+
+        "internal_conditions": {
+          "type": "array",
+          "description": "Attitudes, values, or beliefs inside the TA that cause the current behavior",
+          "items": { "$ref": "#/definitions/condition_item" }
+        },
+
+        "positive_consequences": {
+          "type": "array",
+          "description": "Consequences that reinforce the current behavior (increase likelihood of continuation)",
+          "items": { "$ref": "#/definitions/consequence_item" }
+        },
+
+        "negative_consequences": {
+          "type": "array",
+          "description": "Consequences that decrease likelihood of the current behavior continuing",
+          "items": { "$ref": "#/definitions/consequence_item" }
+        },
+
+        "secondary_consequences": {
+          "type": "array",
+          "description": "Effects of the TA's current behavior on OTHER people or groups (not the TA itself)",
+          "items": { "$ref": "#/definitions/consequence_item" }
+        }
+      }
+    },
+
+    "vulnerabilities": {
+      "type": "object",
+      "description": "Stable levers that can be used to influence the TA's behavior",
+      "required": ["motives", "psychographics", "demographics", "symbols_and_cues"],
+      "properties": {
+
+        "motives": {
+          "type": "array",
+          "description": "Needs and wants that drive behavior and can be leveraged",
+          "items": {
+            "type": "object",
+            "required": ["id", "description", "category", "priority", "behavioral_link"],
+            "properties": {
+              "id":              { "type": "string", "description": "e.g. M1, M2" },
+              "description":     { "type": "string" },
+              "category":        { "type": "string", "enum": ["primary", "secondary"], "description": "Primary: fundamental need. Secondary: derived want." },
+              "priority":        { "type": "string", "enum": ["critical", "short_term", "long_term"] },
+              "behavioral_link": { "type": "string", "description": "How this motive can be used to influence behavior toward SOBJ" },
+              "linked_condition_ids": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "References to condition IDs (EC1, IC2, etc.) that source or validate this motive"
+              },
+              "source":          { "type": "string" }
+            }
+          }
+        },
+
+        "psychographics": {
+          "type": "array",
+          "description": "Psychological characteristics: attitudes, values, beliefs, lifestyle, fears, frustrations",
+          "items": {
+            "type": "object",
+            "required": ["id", "description", "behavioral_link"],
+            "properties": {
+              "id":              { "type": "string" },
+              "description":     { "type": "string" },
+              "behavioral_link": { "type": "string", "description": "How this characteristic can be leveraged" },
+              "linked_condition_ids": { "type": "array", "items": { "type": "string" } },
+              "source":          { "type": "string" }
+            }
+          }
+        },
+
+        "demographics": {
+          "type": "array",
+          "description": "Demographic characteristics relevant to behavior. Avoid protected attributes unless lawful and necessary.",
+          "items": {
+            "type": "object",
+            "required": ["id", "description", "behavioral_link"],
+            "properties": {
+              "id":              { "type": "string" },
+              "description":     { "type": "string" },
+              "behavioral_link": { "type": "string", "description": "How this demographic trait affects behavior or targeting" },
+              "source":          { "type": "string" }
+            }
+          }
+        },
+
+        "symbols_and_cues": {
+          "type": "array",
+          "description": "Icons, narratives, identity signals, brand/category symbols recognized by and meaningful to the TA",
+          "items": {
+            "type": "object",
+            "required": ["id", "description", "recognized_by_ta", "behavioral_link"],
+            "properties": {
+              "id":               { "type": "string" },
+              "description":      { "type": "string" },
+              "recognized_by_ta": { "type": "boolean", "description": "Is this recognizable without additional explanation?" },
+              "behavioral_link":  { "type": "string", "description": "How this symbol supports the argument or influences behavior" },
+              "source":           { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+
+    "susceptibility": {
+      "type": "object",
+      "description": "Estimate of the TA's openness to persuasion toward the desired behavior",
+      "required": ["perceived_risks", "perceived_rewards", "value_belief_alignment", "rating", "rating_rationale", "recommended_approach"],
+      "properties": {
+
+        "perceived_risks": {
+          "type": "array",
+          "description": "Negative consequences the TA believes will happen TO THEM if they do the desired behavior",
+          "items": {
+            "type": "object",
+            "required": ["description"],
+            "properties": {
+              "description":            { "type": "string" },
+              "severity_to_ta":         { "type": "string", "enum": ["low", "medium", "high"] },
+              "linked_condition_ids":   { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+
+        "perceived_rewards": {
+          "type": "array",
+          "description": "Positive consequences the TA believes will happen TO THEM if they do the desired behavior",
+          "items": {
+            "type": "object",
+            "required": ["description"],
+            "properties": {
+              "description":            { "type": "string" },
+              "salience_to_ta":         { "type": "string", "enum": ["low", "medium", "high"] },
+              "linked_vulnerability_ids": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+
+        "value_belief_alignment": {
+          "type": "object",
+          "required": ["assessment", "alignment_direction"],
+          "properties": {
+            "assessment":          { "type": "string", "description": "How the desired behavior fits or conflicts with the TA's identity and values" },
+            "alignment_direction": {
+              "type": "string",
+              "enum": ["aligned", "neutral", "conflicted", "opposed"],
+              "description": "aligned = behavior reinforces identity. opposed = behavior threatens it."
+            }
+          }
+        },
+
+        "rating":           { "type": "integer", "minimum": 1, "maximum": 5 },
+        "rating_rationale": { "type": "string" },
+
+        "recommended_approach": {
+          "type": "object",
+          "required": ["primary_approach"],
+          "properties": {
+            "primary_approach": {
+              "type": "string",
+              "enum": ["informational", "social_norms", "self_efficacy", "incentive", "loss_aversion", "identity_affirmation", "friction_reduction", "authority", "scarcity", "reciprocity", "commitment_consistency"]
+            },
+            "secondary_approach": { "type": "string" },
+            "sequencing_note":    { "type": "string", "description": "If order of approaches matters, explain it here" }
+          }
+        },
+
+        "audience_priority_recommendation": {
+          "type": "object",
+          "required": ["priority", "reason"],
+          "properties": {
+            "priority": { "type": "string", "enum": ["first", "simultaneous", "later", "deprioritize"] },
+            "reason":   { "type": "string" }
+          }
+        }
+      }
+    },
+
+    "accessibility": {
+      "type": "array",
+      "description": "Channels that can reliably reach this TA. Each rated independently.",
+      "items": {
+        "type": "object",
+        "required": ["channel_name", "reach_quality", "advantages", "disadvantages", "rating_rationale"],
+        "properties": {
+          "channel_name":      { "type": "string" },
+          "channel_type":      {
+            "type": "string",
+            "enum": ["digital_paid", "digital_owned", "digital_earned", "in_app", "email", "sms", "community", "partner", "in_person", "print", "broadcast", "out_of_home"]
+          },
+          "reach_quality":     { "type": "integer", "minimum": 1, "maximum": 5 },
+          "advantages":        { "type": "array", "items": { "type": "string" } },
+          "disadvantages":     { "type": "array", "items": { "type": "string" } },
+          "constraints":       { "type": "string", "description": "Restrictions that apply specifically to this channel for this TA" },
+          "violates_restrictions": {
+            "type": "boolean",
+            "description": "Does using this channel conflict with any restriction listed in effectiveness.restrictions?"
+          },
+          "rating_rationale":  { "type": "string" }
+        }
+      }
+    },
+
+    "narrative_and_actions": {
+      "type": "object",
+      "description": "The persuasion logic and the recommended actions to execute it",
+      "required": ["main_argument", "supporting_arguments", "appeal_type", "influence_techniques", "recommended_actions"],
+      "properties": {
+
+        "main_argument": {
+          "type": "object",
+          "description": "The single bottom-line conclusion we want the TA to reach. Structured as if-then.",
+          "required": ["premise", "consequence", "linked_vulnerability_ids"],
+          "properties": {
+            "premise":                 { "type": "string", "description": "The 'if' — the condition or insight that makes the behavior rational for the TA" },
+            "consequence":             { "type": "string", "description": "The 'then' — what the TA gains or avoids by doing the desired behavior" },
+            "linked_vulnerability_ids":{ "type": "array", "items": { "type": "string" }, "description": "Must reference at least one identified vulnerability" }
+          }
+        },
+
+        "supporting_arguments": {
+          "type": "array",
+          "description": "Arguments that substantiate the main argument. Each must trace to a condition, consequence, or vulnerability.",
+          "items": {
+            "type": "object",
+            "required": ["id", "statement", "evidence_type", "linked_ids"],
+            "properties": {
+              "id":          { "type": "string" },
+              "statement":   { "type": "string" },
+              "evidence_type": {
+                "type": "string",
+                "enum": ["factual", "cause_effect", "vulnerability_exploit", "social_proof", "authority"],
+                "description": "What kind of claim is this argument making?"
+              },
+              "linked_ids":  {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "References to condition IDs, consequence IDs, or vulnerability IDs that source this argument"
+              },
+              "source":      { "type": "string" }
+            }
+          }
+        },
+
+        "appeal_type": {
+          "type": "object",
+          "required": ["primary", "rationale"],
+          "properties": {
+            "primary": {
+              "type": "string",
+              "enum": ["gain", "loss_avoidance", "identity", "authority", "social_proof", "scarcity", "fairness", "security", "belonging", "competence"]
+            },
+            "secondary":  { "type": "string" },
+            "rationale":  { "type": "string", "description": "Why this appeal fits the conditions and vulnerabilities identified" },
+            "linked_ids": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+
+        "influence_techniques": {
+          "type": "array",
+          "description": "Named techniques used to deliver the arguments. One per supporting argument recommended.",
+          "items": {
+            "type": "object",
+            "required": ["technique_name", "linked_argument_id", "rationale"],
+            "properties": {
+              "technique_name":      { "type": "string" },
+              "linked_argument_id":  { "type": "string" },
+              "linked_vulnerability_ids": { "type": "array", "items": { "type": "string" } },
+              "rationale":           { "type": "string" }
+            }
+          }
+        },
+
+        "recommended_actions": {
+          "type": "array",
+          "description": "Concrete actions designed to execute the persuasion logic",
+          "items": {
+            "type": "object",
+            "required": ["action_id", "action_type", "description", "linked_vulnerability_ids", "linked_condition_ids"],
+            "properties": {
+              "action_id":   { "type": "string" },
+              "action_type": {
+                "type": "string",
+                "enum": ["message", "offer", "product_change", "experience_change", "partner_action", "policy_change", "customer_success_outreach", "community_activation", "content_asset", "event"]
+              },
+              "description":              { "type": "string" },
+              "linked_vulnerability_ids": { "type": "array", "items": { "type": "string" } },
+              "linked_condition_ids":     { "type": "array", "items": { "type": "string" } },
+              "linked_argument_id":       { "type": "string" },
+              "channel":                  { "type": "string", "description": "Which accessibility channel delivers this action" },
+              "owner":                    { "type": "string" },
+              "dependencies":             { "type": "array", "items": { "type": "string" } },
+              "sequencing_order":         { "type": "integer", "description": "Execution order if actions must be sequenced" }
+            }
+          }
+        }
+      }
+    },
+
+    "assessment": {
+      "type": "object",
+      "description": "Measurable criteria to evaluate whether the TA's behavior changed toward the SOBJ",
+      "required": ["baseline_behavior", "target_behavior", "initial_assessment_question", "refined_assessment_question", "metrics"],
+      "properties": {
+        "baseline_behavior":            { "type": "string", "description": "Current measurable state. Quantified where possible." },
+        "target_behavior":              { "type": "string", "description": "Desired measurable state. Must reference SOBJ direction." },
+        "initial_assessment_question":  { "type": "string", "description": "Broad indicator: has overall behavior changed?" },
+        "refined_assessment_question":  { "type": "string", "description": "TA-specific: has THIS audience's behavior changed in the way the SOBJ requires?" },
+        "metrics": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["metric_name", "metric_type", "definition", "measurement_method", "frequency"],
+            "properties": {
+              "metric_name":         { "type": "string" },
+              "metric_type":         { "type": "string", "enum": ["outcome", "behavior", "leading_indicator", "process"] },
+              "definition":          { "type": "string" },
+              "measurement_method":  { "type": "string" },
+              "frequency":           { "type": "string", "enum": ["daily", "weekly", "monthly", "quarterly", "per_campaign"] },
+              "success_threshold":   { "type": "string" },
+              "direction_check": {
+                "type": "string",
+                "enum": ["anchored_to_desired_behavior", "anchored_to_current_behavior"],
+                "description": "If SOBJ direction is increase: anchor to desired behavior. If decrease: anchor to current behavior."
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "traceability": {
+      "type": "object",
+      "description": "Sources, assumptions, confidence, and ethical guardrails",
+      "required": ["sources", "assumptions", "confidence", "ethical_guardrails"],
+      "properties": {
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["source_id", "description"],
+            "properties": {
+              "source_id":   { "type": "string" },
+              "description": { "type": "string" },
+              "type":        { "type": "string", "enum": ["primary_data", "secondary_research", "expert_judgment", "platform_analytics", "public_dataset", "internal_dataset"] },
+              "url":         { "type": "string" }
+            }
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["assumption_id", "statement"],
+            "properties": {
+              "assumption_id": { "type": "string" },
+              "statement":     { "type": "string" },
+              "risk_if_wrong": { "type": "string" }
+            }
+          }
+        },
+        "confidence": {
+          "type": "object",
+          "required": ["level", "rationale"],
+          "properties": {
+            "level":    { "type": "string", "enum": ["low", "medium", "high"] },
+            "rationale":{ "type": "string" }
+          }
+        },
+        "ethical_guardrails": {
+          "type": "object",
+          "required": ["excluded_tactics", "privacy_constraints", "fairness_constraints"],
+          "properties": {
+            "excluded_tactics":    { "type": "array", "items": { "type": "string" } },
+            "privacy_constraints": { "type": "array", "items": { "type": "string" } },
+            "fairness_constraints":{ "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    }
+
+  },
+
+  "definitions": {
+
+    "condition_item": {
+      "type": "object",
+      "required": ["id", "type", "description"],
+      "properties": {
+        "id":          { "type": "string", "description": "e.g. EC1, EC2, IC1, IC2" },
+        "type": {
+          "type": "string",
+          "enum": ["economic", "political_regulatory", "social_cultural", "environmental_physical", "competitive_market", "technological_platform", "security_safety"],
+          "description": "Categorization of the condition"
+        },
+        "description": { "type": "string", "description": "The situation, event, attitude, value, or belief" },
+        "is_cause_of_current_behavior": {
+          "type": "boolean",
+          "description": "Does this condition causally produce the current behavior? (PSYOP so-what check)"
+        },
+        "source":      { "type": "string" },
+        "assumptions": { "type": "string" }
+      }
+    },
+
+    "consequence_item": {
+      "type": "object",
+      "required": ["id", "description"],
+      "properties": {
+        "id":          { "type": "string", "description": "e.g. PC1, NC1, SC1" },
+        "description": { "type": "string" },
+        "affects":     {
+          "type": "string",
+          "enum": ["ta_directly", "third_party"],
+          "description": "ta_directly for positive/negative consequences. third_party for secondary consequences."
+        },
+        "reinforces_current_behavior": {
+          "type": "boolean",
+          "description": "For positive consequences: true. For negative: false. For secondary: not applicable."
+        },
+        "source":      { "type": "string" },
+        "assumptions": { "type": "string" }
+      }
+    }
+
+  }
+}
