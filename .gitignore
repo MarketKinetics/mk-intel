@@ -13,3 +13,6 @@ data/
 
 ~.docx
 *.docx
+data/company_data/*/raw/
+data/company_data/*/normalized/
+data/company_data/*/enriched/
