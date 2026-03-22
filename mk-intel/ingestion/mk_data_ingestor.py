@@ -388,8 +388,9 @@ class MKDataIngestor:
             print(f"[ingestor] Step 3: All customers will map directly to BTAs "
                   f"via structural matching only.")
             # Create single-cluster assignment
+            self.clustering_dir.mkdir(parents=True, exist_ok=True)
             self._df_cluster = self._df_norm[["customer_id"]].copy()
-            self._df_cluster["cluster_id"]      = 0
+            self._df_cluster["cluster_id"]        = 0
             self._df_cluster["clustering_method"] = "no_clustering_insufficient_features"
             self._df_cluster.to_parquet(assign_path, index=False)
             return self._df_cluster
@@ -694,10 +695,11 @@ class MKDataIngestor:
         df_ta.to_csv(self.enriched_dir / "ta_cards.csv", index=False)
 
         # JSONL for ChromaDB session-scoped collection
+        # Use _json_serializer to handle numpy types from parquet-loaded BTA fields
         jsonl_path = self.enriched_dir / "session_ta_corpus.jsonl"
         with open(jsonl_path, "w", encoding="utf-8") as f:
             for card in self._ta_cards:
-                f.write(json.dumps(card) + "\n")
+                f.write(json.dumps(card, default=_json_serializer) + "\n")
 
         print(f"[ingestor] Step 5: ✓ {len(self._ta_cards)} TA cards built")
         for card in self._ta_cards:
@@ -1241,3 +1243,34 @@ def _make_company_slug(name: str) -> str:
     name = re.sub(r"[^a-z0-9]+", "_", name).strip("_")
     name = re.sub(r"_+", "_", name)
     return name
+
+
+def _json_serializer(obj):
+    """
+    JSON serializer for types not handled by the default encoder.
+
+    Handles:
+        numpy scalars  (np.float64, np.int64 etc.) → native Python float/int
+        numpy arrays   (ndarray) → Python list
+        pandas NA/NaT  → None
+        date/datetime  → ISO string
+
+    Used as the default= argument to json.dumps() when writing JSONL.
+    """
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, (np.floating,)):
+        return float(obj)
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.bool_,)):
+        return bool(obj)
+    if hasattr(obj, "isoformat"):
+        return obj.isoformat()
+    try:
+        import pandas as pd
+        if pd.isna(obj):
+            return None
+    except (TypeError, ValueError):
+        pass
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")

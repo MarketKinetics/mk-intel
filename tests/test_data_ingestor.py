@@ -241,11 +241,21 @@ class TestComputeCoverage:
         assert result["bta_eligible"] is False
 
     def test_bta_eligible_requires_structural_threshold(self):
-        # Only age_bin present = 0.40 weight — above 0.35 threshold
+        # age_bin has relative weight 0.40 out of total 1.10 = 0.3636 normalized.
+        # This is above the 0.35 threshold so bta_eligible should be True.
         record = {"customer_id": "X", "age_bin": "35-44", "country": "US"}
         result = compute_coverage(record)
-        assert result["structural_weight_coverage"] == pytest.approx(1.0, abs=0.01)
         assert result["bta_eligible"] is True
+        assert result["structural_weight_coverage"] > 0.35
+        # age_bin alone = 0.40/1.10 ≈ 0.3636
+        assert result["structural_weight_coverage"] == pytest.approx(0.3636, abs=0.01)
+
+    def test_bta_eligible_false_when_below_threshold(self):
+        # marital_status alone = 0.10/1.10 ≈ 0.0909 — below 0.35 threshold
+        record = {"customer_id": "X", "marital_status": "Married", "country": "US"}
+        result = compute_coverage(record)
+        assert result["bta_eligible"] is False
+        assert result["structural_weight_coverage"] < 0.35
 
     def test_non_us_not_bta_eligible(self):
         record = {
@@ -459,9 +469,16 @@ class TestExpandShorthand:
         assert _expand_shorthand("2y", "days_since_active") == "730"
 
     def test_time_shorthand_only_for_days_fields(self):
-        # Should not expand time shorthands for non-days fields
+        # "4m" on a non-days field is treated as magnitude (4 million), not 4 months
+        # Time-unit expansion only applies to DAYS_FIELDS
+        # For non-days fields, "m" suffix = magnitude (million)
         result = _expand_shorthand("4m", "mrr")
-        assert result is None  # "4m" has no magnitude suffix that matches
+        assert result == "4000000"  # 4 million, not 4 months
+
+    def test_time_shorthand_not_applied_to_non_days_field_weeks(self):
+        # Week suffix has no magnitude meaning — should return None for non-days fields
+        result = _expand_shorthand("4w", "mrr")
+        assert result is None
 
     def test_magnitude_k(self):
         assert _expand_shorthand("1.2k", "mrr") == "1200"

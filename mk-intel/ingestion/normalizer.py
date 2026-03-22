@@ -912,11 +912,15 @@ def _coerce_value(value, expected_type: str, canonical_field: str = ""):
     if expected_type == "float":
         try:
             cleaned = str(value).replace("$", "").replace(",", "").strip()
-            # Handle remaining % signs not caught by _expand_shorthand
-            # (non-rate fields that happen to have % — convert but don't
-            # force 0-1 range; validation will catch if needed)
+            # Handle remaining % signs not caught by _expand_shorthand.
+            # Only convert to proportion for known rate fields (0-1 range).
+            # For non-rate fields, strip % and return raw numeric value.
             if cleaned.endswith("%"):
-                cleaned = str(float(cleaned.rstrip("%")) / 100.0)
+                raw = float(cleaned.rstrip("%").strip())
+                if canonical_field in RATE_FIELDS:
+                    cleaned = str(raw / 100.0)
+                else:
+                    cleaned = str(raw)
             return float(cleaned)
         except (ValueError, TypeError):
             return None
@@ -1359,3 +1363,4 @@ def normalize(
           f"{len(records)} records produced")
 
     return records, all_issues
+
