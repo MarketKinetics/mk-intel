@@ -74,6 +74,7 @@ Public API
 
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 
@@ -440,7 +441,8 @@ def compute_coverage(
     # This is an explicit product decision — MK Intel is US-first.
     # Non-US records are explicitly flagged by the normalizer via country field.
     country  = record.get("country")
-    is_us    = (country is None) or (str(country).strip().upper() == "US")
+    country_clean = re.sub(r"[.\s-]", "", str(country)).upper() if country else None
+    is_us = (country is None) or (country_clean in ("US", "USA", "UNITEDSTATES"))
     bta_eligible = (
         is_us and structural_weight_coverage >= BTA_ELIGIBLE_THRESHOLD
     )
