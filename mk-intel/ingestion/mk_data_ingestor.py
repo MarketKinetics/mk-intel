@@ -138,6 +138,47 @@ MAX_MISSING_PCT = 0.40
 # BTA baseline path — loaded directly for structural matching
 BTA_BASELINE_FILENAME = "mk_bta_baseline.parquet"
 
+# ── Feature exclusion policy ──────────────────────────────────────────────────
+#
+# Gate 1 — ALWAYS excluded (outcome labels + pipeline metadata)
+# These fields are never valid clustering inputs regardless of OBJ or sector.
+CLUSTERING_ALWAYS_EXCLUDED: set[str] = {
+    # Outcome / target labels
+    "subscription_status",
+    "churned",
+    # Coverage and pipeline metadata
+    "bta_eligible",
+    "coverage_score",
+    "confidence_tier",
+    "customer_id_source",
+    "compliance_mode",
+    # Derived tier fields — compressed versions of numeric signals
+    # already present in the clustering feature set
+    "churn_risk_tier",
+    "nps_tier",
+    "feature_adoption_tier",
+    "lifecycle_stage",
+}
+
+# Gate 2 — SOBJ-context exclusion keyword map
+# Maps SOBJ vocabulary to fields that become outcome-adjacent in that context.
+# Only the mapped field is excluded — nothing else.
+SOBJ_CONTEXT_EXCLUSIONS: dict[str, list[str]] = {
+    "churn":        ["churn_risk_score"],
+    "cancel":       ["churn_risk_score"],
+    "renew":        ["churn_risk_score"],
+    "retain":       ["churn_risk_score"],
+    "subscription": ["churn_risk_score"],
+    "reactivat":    ["churn_risk_score"],
+    "lapsed":       ["churn_risk_score"],
+}
+
+# Gate 3 — Low cardinality threshold for numeric fields
+# Numeric fields with fewer unique non-null values than this threshold
+# are excluded from clustering — they behave as step functions rather
+# than continuous signals and will dominate cluster separation.
+NUMERIC_MIN_CARDINALITY = 3
+
 
 # ── Main class ────────────────────────────────────────────────────────────────
 
@@ -434,11 +475,22 @@ class MKDataIngestor:
                             index=False)
 
         # Save stats
-        stats["k"] = k
-        stats["feature_names"] = feature_names
-        stats["n_customers"]   = n
+        gate1_2_excl = self._infer_excluded_features()
+        _, all_excl  = self._check_feature_quality(
+            self._df_norm,
+            [f for f in BEHAVIORAL_CLUSTER_FEATURES
+             if f in self._df_norm.columns and f not in gate1_2_excl],
+            gate1_2_excl,
+        )
+        stats["k"]                 = k
+        stats["feature_names"]     = feature_names
+        stats["n_customers"]       = n
+        stats["excluded_features"] = {
+            field: info for field, info in all_excl.items()
+            if field in self._df_norm.columns  # only log fields actually present
+        }
         with open(stats_path, "w") as f:
-            json.dump(stats, f, indent=2)
+            json.dump(stats, f, indent=2, default=str)
 
         # Summary
         cluster_sizes = self._df_cluster["cluster_id"].value_counts().sort_index()
@@ -830,6 +882,122 @@ class MKDataIngestor:
         return self._bta_baseline
 
 
+    def _infer_excluded_features(self) -> dict[str, dict]:
+        """
+        Infer which fields to exclude from clustering based on session OBJ/SOBJs.
+
+        Three gates applied in order:
+
+        Gate 1 — Always excluded (outcome labels + pipeline metadata)
+            Hard rule, no exceptions, no analyst override.
+
+        Gate 2 — SOBJ-context exclusion
+            Reads approved SOBJs. If churn/retention vocabulary detected,
+            excludes churn_risk_score. Other context-specific exclusions
+            follow the SOBJ_CONTEXT_EXCLUSIONS map.
+            If no SOBJs set, Gate 2 does not apply — no assumptions made.
+
+        Gate 3 — Numeric low-cardinality exclusion
+            Applied in _check_feature_quality() on actual data.
+            Documented here for completeness.
+
+        Returns:
+            Dict of {field: {"gate": int, "reason": str}}
+            for all excluded fields across Gates 1 and 2.
+            Gate 3 exclusions are added by _check_feature_quality().
+        """
+        excluded: dict[str, dict] = {}
+
+        # Gate 1 — always excluded
+        for field in CLUSTERING_ALWAYS_EXCLUDED:
+            excluded[field] = {
+                "gate":   1,
+                "reason": "outcome_label_or_pipeline_metadata",
+            }
+
+        # Gate 2 — SOBJ-context exclusion
+        sobjs = []
+        if self.session and hasattr(self.session, "get_approved_sobjs"):
+            sobjs = self.session.get_approved_sobjs()
+
+        if sobjs:
+            statements = " ".join([s.statement.lower() for s in sobjs])
+            gate2_excluded: set[str] = set()
+
+            for keyword, fields in SOBJ_CONTEXT_EXCLUSIONS.items():
+                if keyword in statements:
+                    for field in fields:
+                        if field not in excluded:
+                            gate2_excluded.add(field)
+
+            for field in gate2_excluded:
+                excluded[field] = {
+                    "gate":   2,
+                    "reason": "sobj_context_outcome_adjacent",
+                    "sobj_keywords_matched": [
+                        kw for kw, flds in SOBJ_CONTEXT_EXCLUSIONS.items()
+                        if kw in statements and field in flds
+                    ],
+                    "post_hoc_use": "cluster_profiling",
+                }
+                print(f"[ingestor]   Gate 2: excluding '{field}' — "
+                      f"outcome-adjacent given OBJ context. "
+                      f"Will be used post-hoc for cluster profiling.")
+        else:
+            print(f"[ingestor]   Gate 2: no approved SOBJs — "
+                  f"context exclusions skipped")
+
+        return excluded
+
+
+    def _check_feature_quality(
+        self,
+        df: pd.DataFrame,
+        features: list[str],
+        gate1_2_excluded: dict[str, dict],
+    ) -> tuple[list[str], dict[str, dict]]:
+        """
+        Gate 3 — Numeric low-cardinality check.
+
+        Excludes numeric fields that have fewer than NUMERIC_MIN_CARDINALITY
+        unique non-null values. These behave as step functions rather than
+        continuous signals and will dominate cluster separation without
+        adding meaningful behavioral nuance.
+
+        Note: this applies to NUMERIC fields only. Categorical fields are
+        already excluded from the clustering candidate list upstream.
+
+        Args:
+            df              : normalized DataFrame
+            features        : candidate feature list (after Gates 1+2)
+            gate1_2_excluded: exclusions already applied by Gates 1 and 2
+
+        Returns:
+            (eligible_features, all_excluded_dict)
+        """
+        all_excluded = dict(gate1_2_excluded)
+        eligible     = []
+
+        for feat in features:
+            if feat not in df.columns:
+                continue
+            n_unique = df[feat].dropna().nunique()
+            if n_unique < NUMERIC_MIN_CARDINALITY:
+                all_excluded[feat] = {
+                    "gate":     3,
+                    "reason":   f"low_cardinality_numeric_{n_unique}_unique_values",
+                    "post_hoc_use": "cluster_profiling",
+                }
+                print(f"[ingestor]   Gate 3: excluding '{feat}' — "
+                      f"numeric field with only {n_unique} unique values "
+                      f"(threshold: {NUMERIC_MIN_CARDINALITY}). "
+                      f"Will be used post-hoc for cluster profiling.")
+            else:
+                eligible.append(feat)
+
+        return eligible, all_excluded
+
+
     def _behavioral_features(
         self,
         df: pd.DataFrame,
@@ -848,10 +1016,16 @@ class MKDataIngestor:
         from sklearn.preprocessing import StandardScaler
         from sklearn.impute import SimpleImputer
 
+        # ── Gates 1 + 2: infer excluded features from OBJ/SOBJ context ─────────
+        gate1_2_excluded = self._infer_excluded_features()
+
+        # ── Missingness filter + Gate 1+2 exclusions ──────────────────────────
         available = []
         for feat in BEHAVIORAL_CLUSTER_FEATURES:
             if feat not in df.columns:
                 continue
+            if feat in gate1_2_excluded:
+                continue  # Gate 1 or 2 exclusion — skip silently (already logged)
             missing_pct = df[feat].isna().mean()
             if missing_pct > MAX_MISSING_PCT:
                 print(f"[ingestor]   Excluding '{feat}': "
@@ -859,12 +1033,38 @@ class MKDataIngestor:
                 continue
             available.append(feat)
 
-        # Require at least 2 Tier-1 features
-        tier1 = [f for f in available if f in BEHAVIORAL_CLUSTER_FEATURES[:5]]
+        # ── Gate 3: numeric low-cardinality check ─────────────────────────────
+        available, all_excluded = self._check_feature_quality(
+            df, available, gate1_2_excluded
+        )
+
+        # ── Numeric type verification ─────────────────────────────────────────────────
+        # Defensive check — ensures no categorical slipped through type coercion.
+        # Should not trigger in normal operation given schema design.
+        non_numeric = [
+            f for f in available
+            if not pd.api.types.is_numeric_dtype(df[f])
+        ]
+        if non_numeric:
+            print(f"[ingestor] ⚠ Non-numeric features detected and removed "
+                f"before K-Means: {non_numeric}")
+            available = [f for f in available if f not in non_numeric]
+
+        # ── Require at least 2 Tier-1 features ───────────────────────────────
+        tier1 = [
+            f for f in available
+            if f in BEHAVIORAL_CLUSTER_FEATURES[:5]
+        ]
         if len(tier1) < 2:
             return None, []
 
         print(f"[ingestor]   Clustering features: {available}")
+        if all_excluded:
+            post_hoc = [f for f, info in all_excluded.items()
+                        if info.get('post_hoc_use') == 'cluster_profiling'
+                        and f in df.columns]
+            if post_hoc:
+                print(f"[ingestor]   Post-hoc profiling fields: {post_hoc}")
 
         X = df[available].values.astype(float)
 
