@@ -16,7 +16,7 @@ of design reasoning.
 | P0 | Segment store (ChromaDB) | ✅ Complete |
 | P0 | Session model | ✅ Complete |
 | P0 | Scoring algorithm | ✅ Complete |
-| P0 | TAAW schema v2 | ✅ Complete |
+| P0 | TAR schema v2 | ✅ Complete |
 | P1.1 | Segment store tests (32/32) | ✅ Complete |
 | P1.2 | Canonical behavioral schema | ✅ Complete |
 | P1.2 | Multi-format readers | ✅ Complete |
@@ -26,8 +26,9 @@ of design reasoning.
 | P1.2 | Synthetic data generator | ✅ Complete |
 | P1.2 | Ingestion tests | ✅ Complete |
 | P1.2 | Demo notebooks (12-15) | ⏳ Pending |
+| P1.2 | Change naming conventions (TAAW -> TAR) | ⏳ Pending |
 | P2 | FastAPI backend | ⏳ Pending |
-| P3 | TAAW generation | ⏳ Pending |
+| P3 | TAR generation | ⏳ Pending |
 | P4 | Scoring + ranking | ⏳ Pending |
 | P5 | Streamlit / React frontend | ⏳ Pending |
 | P6 | Demo auth + quota system | ⏳ Pending |
@@ -164,6 +165,44 @@ Layer 3 — Analyst review:
 
 ---
 
+### 2b. Data Upload Flow — Required Fields
+
+**Priority:** High — implement before public GitHub release
+
+**Decision:** The data upload screen must collect the following fields
+from the analyst before the pipeline runs:
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `dataset_export_date` | date | today | Reference date for duration-to-date conversions (e.g. Membership_Years → customer_since). Critical for accuracy — a dataset exported 6 months ago produces wrong dates if today is used as reference. |
+| `company_name` | string | required | Used to generate company slug and session directory |
+| `sector` | enum | None | standard / banking / ecommerce — controls compliance mode and sector-specific field handling |
+| `compliance_mode` | enum | standard | standard / banking_us / banking_eu / eu_gdpr |
+| `dataset_description` | string | optional | Free text context about the dataset — passed to LLM column mapping for better inference |
+
+**Implementation note:** `dataset_export_date` must be surfaced prominently
+in the upload UI — not buried in advanced settings. A wrong reference date
+silently corrupts all duration-derived dates throughout the pipeline.
+
+---
+### 2c. Data Readiness Engine — Value Vocabulary Check
+
+**Priority:** High — implement before public demo
+
+After column mapping is approved, run a value profile check on each
+mapped field. Compare actual values against canonical vocabulary.
+Flag VALUE_VOCABULARY_MISMATCH when match rate < threshold.
+Present mapping options (rule-based for known patterns, LLM for ambiguous).
+
+Known rule-based patterns:
+- Binary 0/1 on status/boolean fields
+- Y/N or Yes/No on boolean fields  
+- Single-char codes (M/F, A/C) on categorical fields
+
+LLM invoked for non-standard or business-specific values.
+
+---
+
 ### 3. Text Signals — LLM Extraction Pipeline
 
 **Priority:** Low — Phase 1.2b, optional
@@ -230,7 +269,7 @@ Every LLM call in the platform. All must go through `_get_client(session)`.
 | OBJ validation | P1.1 | haiku | ~500 | Per session |
 | SOBJ generation | P1.1 | sonnet | ~2,000 | Per session, up to 3 cycles |
 | LLM pre-filter per SOBJ | P2 | sonnet | ~3,000 | Per SOBJ |
-| TAAW generation | P3 | sonnet | ~5,000 | Per (segment, SOBJ) pair |
+| TAR generation | P3 | sonnet | ~5,000 | Per (segment, SOBJ) pair |
 | BTA card enrichment | P1.2 | sonnet | ~2,000 | Per BTA updated |
 | Narrative regeneration | P1.2 | sonnet | ~1,500 | Per BTA updated |
 
@@ -258,3 +297,7 @@ Demo quota of 30,000 tokens covers approximately 1 full run comfortably.
 | API key policy | BYOK default + funded demo | Protects platform owner, enables demos |
 | Path resolution | Path().resolve().parent | No hardcoded absolute paths anywhere |
 | Segment store reload | force_reload on enrichment | BTAs never overwritten, TAs are session-scoped |
+
+
+### TO TRACK:
+if MK Intel expands to domains where behavioral data is predominantly categorical (e.g. survey response data, CRM tag data), revisit K-Prototypes or UMAP+HDBSCAN at that point.
