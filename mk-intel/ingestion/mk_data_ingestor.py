@@ -1356,10 +1356,18 @@ class MKDataIngestor:
             ]
             if self._df_bta is not None else pd.DataFrame()
         )
-        is_tied          = bool(cell_bta_rows["is_tied"].any()) if not cell_bta_rows.empty and "is_tied" in cell_bta_rows.columns else False
-        ambiguity_group  = cell_bta_rows["ambiguity_group"].iloc[0] if not cell_bta_rows.empty and "ambiguity_group" in cell_bta_rows.columns else None
-        competing_btas   = cell_bta_rows["competing_bta_ids"].iloc[0] if not cell_bta_rows.empty and "competing_bta_ids" in cell_bta_rows.columns else None
-        match_confidence = cell_bta_rows["bta_match_confidence"].iloc[0] if not cell_bta_rows.empty and "bta_match_confidence" in cell_bta_rows.columns else "medium"
+        is_tied         = bool(cell_bta_rows["is_tied"].any()) if not cell_bta_rows.empty and "is_tied" in cell_bta_rows.columns else False
+        ambiguity_group = cell_bta_rows["ambiguity_group"].iloc[0] if not cell_bta_rows.empty and "ambiguity_group" in cell_bta_rows.columns else None
+        competing_btas  = cell_bta_rows["competing_bta_ids"].iloc[0] if not cell_bta_rows.empty and "competing_bta_ids" in cell_bta_rows.columns else None
+
+        # If the cell is tied, confidence is always low — regardless of
+        # individual match scores. A tied cell is ambiguous by definition.
+        if is_tied:
+            match_confidence = "low"
+        elif not cell_bta_rows.empty and "bta_match_confidence" in cell_bta_rows.columns:
+            match_confidence = cell_bta_rows["bta_match_confidence"].mode().iloc[0]
+        else:
+            match_confidence = "medium"
 
         ta_card = {
             # ── Identification ────────────────────────────────────────────────
