@@ -548,20 +548,46 @@ class MKDataIngestor:
             self._df_norm, self._df_cluster["cluster_id"]
         )
 
-        cluster_bta_map: dict[int, dict] = {}
+        # cluster_bta_map: {cluster_id: [(bta_id, score), ...]}
+        # Normally one BTA per cluster. Multiple when tied.
+        cluster_bta_map: dict[int, list[dict]] = {}
         for _, row in cluster_profiles.iterrows():
-            profile = row.to_dict()
-            bta_id, match_score = self._structural_match(profile, bta_baseline)
-            cluster_bta_map[int(row["cluster_id"])] = {
-                "bta_id":       bta_id,
-                "match_score":  match_score,
-                "match_method": "cluster_structural",
-            }
+            profile  = row.to_dict()
+            matches  = self._structural_match(profile, bta_baseline)
+            cid      = int(row["cluster_id"])
+            is_tied  = len(matches) > 1
+            cluster_bta_map[cid] = [
+                {
+                    "bta_id":          bta_id,
+                    "match_score":     score,
+                    "match_method":    "cluster_structural",
+                    "is_tied":         is_tied,
+                    "ambiguity_group": (
+                        f"cluster_{cid}_" +
+                        "_".join(
+                            f"{f}_{profile.get(f)}"
+                            for f in STRUCTURAL_MATCH_FIELDS
+                            if profile.get(f) is not None
+                        )
+                        if is_tied else None
+                    ),
+                }
+                for bta_id, score in matches
+            ]
+            if is_tied:
+                tied_ids = [m["bta_id"] for m in cluster_bta_map[cid]]
+                print(f"[ingestor]   Cluster {cid}: tied BTAs {tied_ids} — "
+                      f"ambiguous assignment, all will be generated")
 
         print(f"[ingestor] Step 4: Cluster-level BTA assignments:")
-        for cid, info in cluster_bta_map.items():
-            print(f"[ingestor]   Cluster {cid} → {info['bta_id']} "
-                  f"(score={info['match_score']:.2f})")
+        for cid, matches in cluster_bta_map.items():
+            if len(matches) == 1:
+                print(f"[ingestor]   Cluster {cid} → {matches[0]['bta_id']} "
+                      f"(score={matches[0]['match_score']:.2f})")
+            else:
+                tied = [(m['bta_id'], m['match_score']) for m in matches]
+                print(f"[ingestor]   Cluster {cid} → TIED {tied} "
+                      f"— dual assignment, both flagged low confidence")
 
         # ── Level 2: Individual override ──────────────────────────────────────
         # Customers with structural_weight_coverage >= 0.35 get individual match
@@ -604,29 +630,51 @@ class MKDataIngestor:
             # Individual has enough structural signal for a BTA match
             struct_cov = row.get("structural_weight_coverage", 0.0)
             if struct_cov >= 0.35:
-                # Individual-level match
-                profile = {f: row.get(f) for f in STRUCTURAL_MATCH_FIELDS}
-                bta_id, score = self._structural_match(profile, bta_baseline)
-                assignments.append({
-                    "customer_id":  customer_id,
-                    "cluster_id":   cluster_id,
-                    "bta_id":       bta_id,
-                    "match_method": "individual_structural",
-                    "match_score":  score,
-                    "match_level":  "individual",
-                })
+                # Individual-level match — may return multiple tied BTAs
+                profile  = {f: row.get(f) for f in STRUCTURAL_MATCH_FIELDS}
+                matches  = self._structural_match(profile, bta_baseline)
+                is_tied  = len(matches) > 1
+                all_bta_ids = [m[0] for m in matches]
+                ambiguity_group = (
+                    f"individual_{customer_id}_" +
+                    "_".join(
+                        f"{f}_{profile.get(f)}"
+                        for f in STRUCTURAL_MATCH_FIELDS
+                        if profile.get(f) is not None
+                    )
+                    if is_tied else None
+                )
+                for bta_id, score in matches:
+                    assignments.append({
+                        "customer_id":        customer_id,
+                        "cluster_id":         cluster_id,
+                        "bta_id":             bta_id,
+                        "match_method":       "individual_structural",
+                        "match_score":        score,
+                        "match_level":        "individual",
+                        "is_tied":            is_tied,
+                        "ambiguity_group":    ambiguity_group,
+                        "competing_bta_ids":  all_bta_ids if is_tied else None,
+                        "bta_match_confidence": "low" if is_tied else "high",
+                    })
                 overrides += 1
             else:
-                # Inherit cluster-level assignment
-                cluster_info = cluster_bta_map.get(cluster_id, {})
-                assignments.append({
-                    "customer_id":  customer_id,
-                    "cluster_id":   cluster_id,
-                    "bta_id":       cluster_info.get("bta_id"),
-                    "match_method": "cluster_inherited",
-                    "match_score":  cluster_info.get("match_score"),
-                    "match_level":  "cluster",
-                })
+                # Inherit cluster-level assignments (may be multiple if tied)
+                cluster_matches = cluster_bta_map.get(cluster_id, [])
+                all_bta_ids     = [m["bta_id"] for m in cluster_matches]
+                for cluster_info in cluster_matches:
+                    assignments.append({
+                        "customer_id":        customer_id,
+                        "cluster_id":         cluster_id,
+                        "bta_id":             cluster_info.get("bta_id"),
+                        "match_method":       "cluster_inherited",
+                        "match_score":        cluster_info.get("match_score"),
+                        "match_level":        "cluster",
+                        "is_tied":            cluster_info.get("is_tied", False),
+                        "ambiguity_group":    cluster_info.get("ambiguity_group"),
+                        "competing_bta_ids":  all_bta_ids if cluster_info.get("is_tied") else None,
+                        "bta_match_confidence": "low" if cluster_info.get("is_tied") else "medium",
+                    })
 
         self._df_bta = pd.DataFrame(assignments)
 
@@ -1038,18 +1086,6 @@ class MKDataIngestor:
             df, available, gate1_2_excluded
         )
 
-        # ── Numeric type verification ─────────────────────────────────────────────────
-        # Defensive check — ensures no categorical slipped through type coercion.
-        # Should not trigger in normal operation given schema design.
-        non_numeric = [
-            f for f in available
-            if not pd.api.types.is_numeric_dtype(df[f])
-        ]
-        if non_numeric:
-            print(f"[ingestor] ⚠ Non-numeric features detected and removed "
-                f"before K-Means: {non_numeric}")
-            available = [f for f in available if f not in non_numeric]
-
         # ── Require at least 2 Tier-1 features ───────────────────────────────
         tier1 = [
             f for f in available
@@ -1199,25 +1235,30 @@ class MKDataIngestor:
         self,
         profile: dict,
         bta_baseline: pd.DataFrame,
-    ) -> tuple[str, float]:
+    ) -> list[tuple[str, float]]:
         """
-        Match a demographic profile to the nearest BTA.
+        Match a demographic profile to the nearest BTA(s).
 
         Uses weighted field comparison:
             - For each structural field present in profile,
-              add its weight if it matches the BTA's dominant value.
+              add its weight if it matches the BTA dominant value.
             - Normalize by total weight of present fields.
-            - Return BTA with highest normalized match score.
+            - Return ALL BTAs that tied at the maximum score.
+
+        When multiple BTAs tie (e.g. both BTA_00 and BTA_03 match
+        age_bin=35-44 with no income data), all are returned.
+        The caller creates one assignment row per tied BTA — same
+        customer appears in multiple cells, all flagged as ambiguous.
 
         Args:
             profile      : dict with structural field values
             bta_baseline : BTA baseline DataFrame
 
         Returns:
-            (bta_id, match_score) where match_score is 0-1.
+            List of (bta_id, match_score) tuples.
+            Normally one item. Multiple items when tied.
         """
-        best_bta   = None
-        best_score = -1.0
+        scores: dict[str, float] = {}
 
         for _, bta_row in bta_baseline.iterrows():
             bta_id         = bta_row["segment_id"]
@@ -1229,7 +1270,6 @@ class MKDataIngestor:
                 if profile_val is None:
                     continue
 
-                # Get BTA dominant value for this field
                 bta_field = f"dominant_{field}"
                 bta_val   = bta_row.get(bta_field)
 
@@ -1240,18 +1280,23 @@ class MKDataIngestor:
                 if str(profile_val).strip() == str(bta_val).strip():
                     weighted_match += weight
 
-            score = weighted_match / total_weight if total_weight > 0 else 0.0
+            scores[bta_id] = (
+                weighted_match / total_weight if total_weight > 0 else 0.0
+            )
 
-            if score > best_score:
-                best_score = score
-                best_bta   = bta_id
+        # Fallback — no structural fields present
+        if not scores or max(scores.values()) == 0.0:
+            fallback_id = bta_baseline.iloc[0]["segment_id"]
+            return [(fallback_id, 0.0)]
 
-        # Fallback to first BTA if no match found
-        if best_bta is None:
-            best_bta   = bta_baseline.iloc[0]["segment_id"]
-            best_score = 0.0
+        best_score = max(scores.values())
+        tied_btas  = [
+            (bta_id, round(score, 4))
+            for bta_id, score in scores.items()
+            if score == best_score
+        ]
 
-        return best_bta, round(best_score, 4)
+        return tied_btas
 
 
     def _build_single_ta_card(
@@ -1303,6 +1348,19 @@ class MKDataIngestor:
         )
 
         # ── Build TA card ─────────────────────────────────────────────────────
+        # ── Ambiguity metadata from cell ─────────────────────────────────────
+        cell_bta_rows = (
+            self._df_bta[
+                (self._df_bta["cluster_id"] == cluster_id) &
+                (self._df_bta["bta_id"] == bta_id)
+            ]
+            if self._df_bta is not None else pd.DataFrame()
+        )
+        is_tied          = bool(cell_bta_rows["is_tied"].any()) if not cell_bta_rows.empty and "is_tied" in cell_bta_rows.columns else False
+        ambiguity_group  = cell_bta_rows["ambiguity_group"].iloc[0] if not cell_bta_rows.empty and "ambiguity_group" in cell_bta_rows.columns else None
+        competing_btas   = cell_bta_rows["competing_bta_ids"].iloc[0] if not cell_bta_rows.empty and "competing_bta_ids" in cell_bta_rows.columns else None
+        match_confidence = cell_bta_rows["bta_match_confidence"].iloc[0] if not cell_bta_rows.empty and "bta_match_confidence" in cell_bta_rows.columns else "medium"
+
         ta_card = {
             # ── Identification ────────────────────────────────────────────────
             "ta_id":             ta_id,
@@ -1311,6 +1369,7 @@ class MKDataIngestor:
             "archetype_name":    (
                 f"{bta_data.get('archetype_name', bta_id)} "
                 f"[Cluster {cluster_id}]"
+                + (" ⚠ AMBIGUOUS" if is_tied else "")
             ),
 
             # ── Population metadata ───────────────────────────────────────────
@@ -1360,6 +1419,19 @@ class MKDataIngestor:
             "has_business_behavioral": len(behavioral) > 0,
             "created_at":             datetime.now(timezone.utc).isoformat(),
             "session_id":             self.session.session_id,
+
+            # ── BTA assignment confidence and ambiguity ───────────────────────
+            "bta_match_confidence":   match_confidence,
+            "is_ambiguous_bta":       is_tied,
+            "ambiguity_group":        ambiguity_group,
+            "competing_bta_ids":      competing_btas,
+            "ambiguity_note":         (
+                f"BTA assignment is ambiguous — customer profile matches "
+                f"{competing_btas} equally. "
+                f"Income or housing data would resolve this. "
+                f"Both TAs are generated — review TAR scores before acting."
+                if is_tied else None
+            ),
         }
 
         return ta_card
