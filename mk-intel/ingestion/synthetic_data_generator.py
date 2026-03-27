@@ -174,6 +174,40 @@ ZIP_CODES = [
     "19101", "98101", "30301", "02101", "94102",
 ]
 
+# ── ZIP cohorts for zip_enrichment_demo scenario ──────────────────────────────
+# Verified against ACS 2022 5-year ZCTA data (zcta_enrichment.parquet).
+# Each cohort is designed to produce a specific BTA confidence validation case.
+
+# Case A — Full alignment: White dominant, high income
+# ZIP-inferred race matches BTA_00 (Hispanic) or BTA_02 (White) dominant race.
+# age 35-64, income 100-199k+, White ZIP → BTA_00 or BTA_02 confirmed (high)
+ZIP_COHORT_A = [
+    "90210",  # Beverly Hills CA     — White 0.81, 100-199k
+    "10021",  # Upper East Side NY   — White 0.81, 100-199k
+    "94027",  # Atherton CA          — White 0.67, 200k+
+    "07078",  # Short Hills NJ       — White 0.51, 200k+
+    "02481",  # Wellesley MA         — White 0.76, 200k+
+]
+
+# Case B — Race diverges: Hispanic dominant, mid income
+# ZIP-inferred race diverges from BTA_03 (White dominant) despite income match.
+# age 35-44, income 50-99k, but ZIP is Hispanic → medium confidence
+ZIP_COHORT_B = [
+    "90011",  # Los Angeles CA       — Hispanic 0.92, 50-99k
+    "77009",  # Houston TX           — Hispanic 0.56, 50-99k
+    "85031",  # Phoenix AZ           — Hispanic 0.82, 50-99k
+    "60623",  # Chicago IL           — Hispanic 0.69, 20-49k
+    "78207",  # San Antonio TX       — Hispanic 0.89, 20-49k
+]
+
+# Case C — Income conflict: low-income ZIP, high-income customer
+# ZIP-inferred income contradicts customer income → low confidence → LLM archetype
+ZIP_COHORT_C = [
+    "10451",  # Bronx NY             — Hispanic 0.55, 20-49k
+    "77051",  # Houston TX           — Black 0.78,    20-49k
+    "60629",  # Chicago IL           — Hispanic 0.75, 50-99k
+]
+
 
 # ── Scenario registry ─────────────────────────────────────────────────────────
 
@@ -298,6 +332,27 @@ SCENARIO_REGISTRY: dict[str, dict] = {
         "include_ecommerce":  False,
         "include_edge_cases": False,
         "sparse_pct":         0.0,
+    },
+
+    "zip_enrichment_demo": {
+        "description": "ZIP enrichment validation demo. 1,500 US SaaS customers "
+                       "across three deliberate cohorts designed to produce "
+                       "Cases A, B, and C in the BTA confidence validation: "
+                       "Cohort A (500) full alignment (age+income+race match BTA); "
+                       "Cohort B (500) race diverges (age+income match, ZIP-inferred "
+                       "race differs from BTA dominant); "
+                       "Cohort C (500) income conflict (ZIP-inferred income contradicts "
+                       "customer income, triggering LLM custom archetype).",
+        "n_customers":    1500,
+        "sector":         None,
+        "coverage_level": "high",
+        "countries":      COUNTRIES_US,
+        "seed":           123,
+        "include_banking":    False,
+        "include_ecommerce":  False,
+        "include_edge_cases": False,
+        "sparse_pct":         0.0,
+        "zip_enrichment_demo": True,
     },
 }
 
@@ -589,6 +644,61 @@ def _inject_edge_cases(records: list[dict], rng: random.Random) -> list[dict]:
     return records
 
 
+
+def _apply_zip_enrichment_cohort(
+    record: dict,
+    i: int,
+    n_total: int,
+    rng: random.Random,
+) -> dict:
+    """
+    Override ZIP code and demographic fields to produce deliberate
+    ZIP enrichment validation cases for the zip_enrichment_demo scenario.
+
+    Splits customers into three equal cohorts:
+        Cohort A (first third)  — full alignment: White ZIP, high income
+        Cohort B (middle third) — race diverges: Hispanic ZIP, mid income
+        Cohort C (last third)   — income conflict: low-income ZIP, high income
+
+    Each cohort is designed to trigger a specific BTA confidence validation
+    case (A=high, B=medium, C=low/LLM archetype) when ZIP enrichment runs.
+    """
+    cohort_size = n_total // 3
+
+    if i < cohort_size:
+        # ── Cohort A — Full alignment ─────────────────────────────────────────
+        # White-dominant, high-income ZIP + matching customer demographics
+        # → BTA_02 (Educated Affluent Homeowners) or BTA_00 confirmed
+        record["zip_code"]       = rng.choice(ZIP_COHORT_A)
+        record["age"]            = rng.randint(35, 64)
+        record["income_annual"]  = round(rng.uniform(100_000, 199_000))
+        record["housing_tenure"] = "Owner"
+        record["gender"]         = rng.choice(["Male", "Female"])
+
+    elif i < cohort_size * 2:
+        # ── Cohort B — Race diverges ──────────────────────────────────────────
+        # Hispanic-dominant ZIP but customer income matches BTA_03 (White, 50-99k)
+        # ZIP-inferred race will diverge from BTA dominant race → medium confidence
+        record["zip_code"]       = rng.choice(ZIP_COHORT_B)
+        record["age"]            = rng.randint(35, 44)
+        record["income_annual"]  = round(rng.uniform(50_000, 99_000))
+        record["housing_tenure"] = rng.choice(["Owner", "Renter"])
+        record["gender"]         = rng.choice(["Male", "Female"])
+
+    else:
+        # ── Cohort C — Income conflict ────────────────────────────────────────
+        # Low-income ZIP (20-49k) but customer has high income (100-199k)
+        # ZIP-inferred income will conflict with structural match → low confidence
+        # → LLM custom archetype builder invoked
+        record["zip_code"]       = rng.choice(ZIP_COHORT_C)
+        record["age"]            = rng.randint(25, 54)
+        record["income_annual"]  = round(rng.uniform(100_000, 199_000))
+        record["housing_tenure"] = "Owner"
+        record["gender"]         = rng.choice(["Male", "Female"])
+
+    return record
+
+
 def _rename_columns(
     df: pd.DataFrame,
     use_canonical_names: bool = False,
@@ -701,6 +811,9 @@ def generate_scenario(
         if config.get("include_banking"):
             record = _add_banking_fields(record, rng)
 
+        if config.get("zip_enrichment_demo"):
+            record = _apply_zip_enrichment_cohort(record, i, n, rng)
+
         if sparse_pct > 0:
             record = _apply_sparsity(record, rng, sparse_pct)
 
@@ -788,6 +901,8 @@ def generate_custom(
             record = _add_ecommerce_fields(record, rng)
         if include_banking:
             record = _add_banking_fields(record, rng)
+        if config.get("zip_enrichment_demo"):
+            record = _apply_zip_enrichment_cohort(record, i, n_customers, rng)
         if sparse_pct > 0:
             record = _apply_sparsity(record, rng, sparse_pct)
         records.append(record)
