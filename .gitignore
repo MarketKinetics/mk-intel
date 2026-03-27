@@ -16,3 +16,15 @@ data/
 data/company_data/*/raw/
 data/company_data/*/normalized/
 data/company_data/*/enriched/
+
+# Exclude company data and raw datasets
+data/company_data/
+data/societal_raw/
+
+# But keep platform reference assets
+!data/reference/
+!data/reference/zcta_enrichment.parquet
+
+echo "core/doctrine/" >> .gitignore
+echo "docs/" >> .gitignore
+echo "mk-intel/*.pdf" >> .gitignore

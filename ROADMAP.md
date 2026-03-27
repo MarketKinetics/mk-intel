@@ -298,6 +298,56 @@ Demo quota of 30,000 tokens covers approximately 1 full run comfortably.
 | Path resolution | Path().resolve().parent | No hardcoded absolute paths anywhere |
 | Segment store reload | force_reload on enrichment | BTAs never overwritten, TAs are session-scoped |
 
+### 6. Clustering Results Screen — Frontend Requirements
+
+**Priority:** High — core transparency feature, implement in P5
+
+**The clustering results screen must surface the full decision trail
+to the analyst. MK Intel's transparency layer is a key differentiator
+over black-box clustering tools.**
+
+**Section 1 — Feature selection rationale**
+Table showing every field considered for clustering with decision,
+gate, and reason:
+
+| Field | Decision | Gate | Reason |
+|---|---|---|---|
+| sessions_last_30d | ✓ Included | — | Core behavioral signal |
+| churn_risk_score | ✗ Excluded | Gate 2 | Outcome-adjacent: churn OBJ detected |
+| subscription_status | ✗ Excluded | Gate 1 | Outcome label |
+
+Data source: `cluster_stats.json` → `excluded_features` dict.
+
+**Section 2 — k selection chart**
+Interactive silhouette + inertia chart across tested k values.
+Plain-language caption: "The platform tested k=2 through k=8.
+k=2 produced the most cohesive clusters (silhouette=0.378)."
+Data source: `cluster_stats.json` → `silhouette_scores`, `inertias`.
+
+**Section 3 — Cluster profile cards**
+One card per cluster showing:
+- Size (n and % of total)
+- Median values per behavioral feature
+- Post-hoc field distributions (churn rate, subscription status)
+- LLM-generated plain-language archetype name and one-line description
+
+**Section 4 — Post-hoc labels**
+Explicitly labeled section: "The following fields were excluded from
+clustering but used to characterize the resulting segments."
+Shows distribution of each post-hoc field per cluster.
+
+**Section 5 — Override panel (collapsible)**
+Allows analyst to force-include a Gate 2 excluded field with a
+documented reason. Re-runs clustering with override applied.
+Shows side-by-side comparison of original vs override clustering.
+Override and reason logged to `cluster_stats.json` as auditable record.
+
+**Data sources:**
+- `clustering/cluster_stats.json` — k, silhouette, excluded features
+- `clustering/cluster_profiles.parquet` — dominant profiles per cluster
+- `clustering/cluster_assignments.parquet` — per-customer assignments
+- `normalized/normalized_records.parquet` — post-hoc field values
+
 
 ### TO TRACK:
 if MK Intel expands to domains where behavioral data is predominantly categorical (e.g. survey response data, CRM tag data), revisit K-Prototypes or UMAP+HDBSCAN at that point.
