@@ -365,9 +365,9 @@ def build_custom_archetype(
         Flagged as source_type="llm_inferred_custom_archetype".
     """
     try:
-        from mk_intel_session import get_client
+        from utils import get_client
     except ImportError:
-        from mk_intel.mk_intel_session import get_client
+        from mk_intel.ingestion.utils import get_client
 
     import json
 
@@ -421,7 +421,7 @@ Do not include any explanation or preamble.
         profile = {}
 
     # Add provenance metadata
-    profile["segment_id"]          = f"CUSTOM_{cluster_id:02d}"
+    profile["segment_id"] = f"CUSTOM_{cluster_id:02d}_{bta_id}"
     profile["source_type"]         = "llm_inferred_custom_archetype"
     profile["source_cluster_id"]   = cluster_id
     profile["source_signals"]      = cluster_signals

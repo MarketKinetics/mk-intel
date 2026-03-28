@@ -32,6 +32,16 @@ Pipeline steps
                bta_matching/cross_tabulation.parquet,
                bta_matching/candidate_tas.json
 
+    Step 4.5 — enrich_zip()  [optional, standard mode only]
+        ZIP code enrichment + BTA confidence validation.
+        Skipped if zcta_path not provided or compliance mode blocks it.
+        Adds zip_inferred_income_tier, zip_inferred_race_eth to normalized records.
+        Adds bta_match_confidence, bta_race_validation to BTA assignments.
+        Case C clusters (income conflict) trigger LLM custom archetype builder.
+        Saves: normalized/normalized_records.parquet (updated),
+               bta_matching/bta_assignments.parquet (updated),
+               enriched/custom_archetypes.json
+
     Step 5 — build_ta_cards()
         Generate TA cards for candidate cells
         Saves: enriched/ta_cards.parquet,
@@ -202,11 +212,13 @@ class MKDataIngestor:
         company_data_root: Path,
         compliance_mode: str = "standard",
         sector: Optional[str] = None,
+        zcta_path: Optional[Path] = None,
     ):
         self.session          = session
         self.company_data_root = Path(company_data_root)
         self.compliance_mode  = compliance_mode
         self.sector           = sector
+        self.zcta_path        = Path(zcta_path) if zcta_path else None
 
         # Derive company slug and session directory
         company_name    = session.company.name if session.company else "unknown"
@@ -260,6 +272,7 @@ class MKDataIngestor:
         self.compute_coverage(force=force)
         self.cluster(force=force)
         self.match_btas(force=force)
+        self.enrich_zip(force=force)
         self.build_ta_cards(force=force)
         self.save()
 
@@ -303,7 +316,8 @@ class MKDataIngestor:
         # ── Save raw copy ─────────────────────────────────────────────────────
         self.raw_dir.mkdir(parents=True, exist_ok=True)
         raw_dest = self.raw_dir / file_path.name
-        shutil.copy2(file_path, raw_dest)
+        if Path(file_path).resolve() != Path(raw_dest).resolve():
+            shutil.copy2(file_path, raw_dest)
         print(f"[ingestor] Raw file saved to: {raw_dest}")
 
         # ── Normalize ─────────────────────────────────────────────────────────
@@ -715,6 +729,172 @@ class MKDataIngestor:
 
         return self._df_bta
 
+
+
+    def enrich_zip(self, force: bool = False) -> "Optional[pd.DataFrame]":
+        """
+        Step 4.5 — ZIP code enrichment and BTA confidence validation.
+
+        Optional step — only runs when:
+            1. self.zcta_path is set (passed at ingestor init)
+            2. compliance_mode allows ZIP enrichment (standard mode only)
+            3. zip_code column is present in normalized records
+
+        Adds zip_inferred_income_tier and zip_inferred_race_eth to each
+        normalized record, then cross-checks against matched BTA household
+        income tier and race/eth to assign BTA confidence (high/medium/low).
+
+        Case C clusters (income conflict) trigger the LLM custom archetype
+        builder — one API call per conflicted cluster x BTA cell.
+
+        Saves:
+            normalized/normalized_records.parquet (updated with ZIP fields)
+            bta_matching/bta_assignments.parquet (updated with confidence)
+            enriched/custom_archetypes.json (Case C archetypes, if any)
+
+        Returns:
+            Updated df_bta with confidence fields, or None if skipped.
+        """
+        enrichment_flag = self.normalized_dir / ".zip_enrichment_applied"
+
+        if enrichment_flag.exists() and not force:
+            print(f"[ingestor] Step 4.5: ZIP enrichment already applied — skipping")
+            return self._df_bta
+
+        # ── No ZCTA path — skip silently ──────────────────────────────────────
+        if not self.zcta_path:
+            print(f"[ingestor] Step 4.5: No ZCTA path provided — skipping ZIP enrichment")
+            return self._df_bta
+
+        try:
+            from zip_enrichment import (
+                enrich_with_zip,
+                validate_bta_race_match,
+                build_custom_archetype,
+            )
+        except ImportError:
+            from mk_intel.ingestion.zip_enrichment import (
+                enrich_with_zip,
+                validate_bta_race_match,
+                build_custom_archetype,
+            )
+
+        print(f"[ingestor] Step 4.5: ZIP enrichment starting...")
+
+        # ── Load normalized records if needed ─────────────────────────────────
+        norm_path = self.normalized_dir / "normalized_records.parquet"
+        if self._df_norm is None:
+            self._df_norm = pd.read_parquet(norm_path)
+
+        # ── Run ZIP enrichment ────────────────────────────────────────────────
+        df_enriched = enrich_with_zip(
+            self._df_norm,
+            self.zcta_path,
+            compliance_mode=self.compliance_mode,
+        )
+        df_enriched.to_parquet(norm_path, index=False)
+        self._df_norm = df_enriched
+
+        # ── Load BTA assignments if needed ────────────────────────────────────
+        assign_path = self.bta_dir / "bta_assignments.parquet"
+        if self._df_bta is None:
+            self._df_bta = pd.read_parquet(assign_path)
+
+        # ── Load BTA baseline ─────────────────────────────────────────────────
+        bta_baseline = self._load_bta_baseline()
+
+        # ── Run BTA confidence validation ─────────────────────────────────────
+        df_validated = validate_bta_race_match(
+            self._df_bta,
+            df_enriched,
+            bta_baseline,
+        )
+
+        # Merge confidence back into df_bta
+        confidence_map = df_validated[
+            ["customer_id", "bta_id", "bta_match_confidence",
+             "bta_race_validation", "needs_custom_archetype"]
+        ].drop_duplicates(subset=["customer_id", "bta_id"])
+
+        self._df_bta = self._df_bta.merge(
+            confidence_map,
+            on=["customer_id", "bta_id"],
+            how="left",
+            suffixes=("", "_zip"),
+        )
+        if "bta_match_confidence_zip" in self._df_bta.columns:
+            mask = self._df_bta["bta_match_confidence_zip"].notna()
+            self._df_bta.loc[mask, "bta_match_confidence"] = \
+                self._df_bta.loc[mask, "bta_match_confidence_zip"]
+            self._df_bta.drop(columns=["bta_match_confidence_zip"], inplace=True)
+
+        self._df_bta.to_parquet(assign_path, index=False)
+
+        # ── Case C — LLM custom archetype builder ─────────────────────────────
+        case_c = df_validated[
+            (df_validated["needs_custom_archetype"] == True) &
+            (df_validated["bta_id"].notna())
+        ]
+
+        case_c_cells = (
+            case_c.groupby(["cluster_id", "bta_id"])
+            .agg(
+                n_customers=("customer_id", "count"),
+                zip_income=("cluster_zip_income_tier",
+                            lambda x: x.mode().iloc[0] if not x.mode().empty else None),
+                zip_race=("cluster_zip_race_eth",
+                          lambda x: x.mode().iloc[0] if not x.mode().empty else None),
+            )
+            .reset_index()
+        )
+
+        custom_archetypes = []
+        if len(case_c_cells) > 0:
+            print(f"[ingestor] Step 4.5: {len(case_c_cells)} Case C cells — building LLM custom archetypes...")
+
+            for _, cell in case_c_cells.iterrows():
+                cluster_id = int(cell["cluster_id"])
+                bta_id     = cell["bta_id"]
+
+                cluster_signals = {
+                    "zip_inferred_race_eth":    cell.get("zip_race"),
+                    "zip_inferred_income_tier": cell.get("zip_income"),
+                    "cluster_id":               cluster_id,
+                    "matched_bta":              bta_id,
+                    "conflict_type":            "income_conflict",
+                    "company_context": (
+                        f"{self.session.company.name if self.session.company else 'Unknown'} — "
+                        f"{self.sector or 'general'} sector"
+                    ),
+                }
+
+                archetype = build_custom_archetype(
+                    cluster_id      = cluster_id,
+                    cluster_signals = cluster_signals,
+                    session         = self.session,
+                    bta_baseline    = bta_baseline,
+                )
+                custom_archetypes.append(archetype)
+                print(f"[ingestor]   ✓ Cluster {cluster_id} x {bta_id}: {archetype.get('archetype_name')}")
+
+        # Save custom archetypes
+        self.enriched_dir.mkdir(parents=True, exist_ok=True)
+        custom_path = self.enriched_dir / "custom_archetypes.json"
+        with open(custom_path, "w") as f:
+            json.dump(custom_archetypes, f, indent=2, default=_json_serializer)
+
+        # Write flag
+        enrichment_flag.touch()
+
+        # Summary
+        if df_validated["bta_id"].notna().any():
+            matched    = df_validated[df_validated["bta_id"].notna()]
+            conf_counts = matched["bta_match_confidence"].value_counts().to_dict()
+            print(f"[ingestor] Step 4.5: ✓ ZIP enrichment complete")
+            print(f"[ingestor]   Confidence distribution : {conf_counts}")
+            print(f"[ingestor]   Case C archetypes built : {len(custom_archetypes)}")
+
+        return self._df_bta
 
     def build_ta_cards(self, force: bool = False) -> list[dict]:
         """
@@ -1391,6 +1571,7 @@ class MKDataIngestor:
             "dominant_edu_tier":        bta_data.get("dominant_edu_tier"),
             "dominant_emp_tier":        bta_data.get("dominant_emp_tier"),
             "dominant_household_income_tier": bta_data.get("dominant_household_income_tier"),
+            "dominant_income_tier":      bta_data.get("dominant_income_tier"),
             "dominant_mar_tier":        bta_data.get("dominant_mar_tier"),
             "dominant_tenure":          bta_data.get("dominant_tenure"),
             "structural_profile":       bta_data.get("structural_profile"),

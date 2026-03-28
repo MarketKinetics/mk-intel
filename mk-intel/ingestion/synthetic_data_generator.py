@@ -25,6 +25,7 @@ Mode 1 — Named scenarios (pre-defined, deterministic):
         edge_cases              All edge cases. Shorthand values, bad data.
         small_company           Small dataset. 150 customers, % threshold test.
         no_behavioral_features  No behavioral fields. Tests clustering fallback.
+        zip_enrichment_demo     ZIP enrichment validation. 1500 customers, 3 cohorts.
 
 Mode 2 — Custom generation:
     Caller specifies parameters and gets a tailored dataset.
@@ -176,36 +177,38 @@ ZIP_CODES = [
 
 # ── ZIP cohorts for zip_enrichment_demo scenario ──────────────────────────────
 # Verified against ACS 2022 5-year ZCTA data (zcta_enrichment.parquet).
-# Each cohort is designed to produce a specific BTA confidence validation case.
-
-# Case A — Full alignment: White dominant, high income
-# ZIP-inferred race matches BTA_00 (Hispanic) or BTA_02 (White) dominant race.
-# age 35-64, income 100-199k+, White ZIP → BTA_00 or BTA_02 confirmed (high)
+# Cohort design anchored to BTA_00 (dominant_household_income_tier=50-99k,
+# dominant_race_eth=White) — the most common BTA match for this age/income range.
+#
+# ZIP enrichment uses ZCTA household income (ACS median HH income at ZIP level).
+# Confidence validation compares zip_inferred_income_tier against
+# dominant_household_income_tier on the matched BTA card.
+#
+# Case A — Full alignment: White ZIP, 50-99k HH income → matches BTA_00 HH tier
 ZIP_COHORT_A = [
-    "90210",  # Beverly Hills CA     — White 0.81, 100-199k
-    "10021",  # Upper East Side NY   — White 0.81, 100-199k
-    "94027",  # Atherton CA          — White 0.67, 200k+
-    "07078",  # Short Hills NJ       — White 0.51, 200k+
-    "02481",  # Wellesley MA         — White 0.76, 200k+
+    "01001",  # Agawam MA        — White 0.85, 50-99k
+    "01005",  # Barre MA         — White 0.93, 50-99k
+    "01008",  # Blandford MA     — White 0.95, 50-99k
+    "01009",  # Bondsville MA    — White 1.00, 50-99k
+    "01010",  # Brimfield MA     — White 0.81, 50-99k
 ]
 
-# Case B — Race diverges: Hispanic dominant, mid income
-# ZIP-inferred race diverges from BTA_03 (White dominant) despite income match.
-# age 35-44, income 50-99k, but ZIP is Hispanic → medium confidence
+# Case B — Race diverges: Hispanic ZIP, 50-99k HH income
+# HH income matches BTA_00 HH tier but ZIP race diverges from BTA_00 (White)
 ZIP_COHORT_B = [
-    "90011",  # Los Angeles CA       — Hispanic 0.92, 50-99k
-    "77009",  # Houston TX           — Hispanic 0.56, 50-99k
-    "85031",  # Phoenix AZ           — Hispanic 0.82, 50-99k
-    "60623",  # Chicago IL           — Hispanic 0.69, 20-49k
-    "78207",  # San Antonio TX       — Hispanic 0.89, 20-49k
+    "00966",  # Puerto Rico      — Hispanic 0.98, 50-99k
+    "00968",  # Puerto Rico      — Hispanic 0.98, 50-99k
+    "00969",  # Puerto Rico      — Hispanic 0.99, 50-99k
+    "01841",  # Lawrence MA      — Hispanic 0.86, 50-99k
+    "01843",  # Lawrence MA      — Hispanic 0.73, 50-99k
 ]
 
-# Case C — Income conflict: low-income ZIP, high-income customer
-# ZIP-inferred income contradicts customer income → low confidence → LLM archetype
+# Case C — Income conflict: Hispanic ZIP, 20-49k HH income
+# Conflicts with BTA_00 HH tier (50-99k) → low confidence → LLM archetype
 ZIP_COHORT_C = [
-    "10451",  # Bronx NY             — Hispanic 0.55, 20-49k
-    "77051",  # Houston TX           — Black 0.78,    20-49k
-    "60629",  # Chicago IL           — Hispanic 0.75, 50-99k
+    "00602",  # Puerto Rico      — Hispanic 0.95, 20-49k
+    "00612",  # Puerto Rico      — Hispanic 0.99, 20-49k
+    "00622",  # Puerto Rico      — Hispanic 0.99, 20-49k
 ]
 
 
@@ -333,16 +336,13 @@ SCENARIO_REGISTRY: dict[str, dict] = {
         "include_edge_cases": False,
         "sparse_pct":         0.0,
     },
-
     "zip_enrichment_demo": {
         "description": "ZIP enrichment validation demo. 1,500 US SaaS customers "
-                       "across three deliberate cohorts designed to produce "
-                       "Cases A, B, and C in the BTA confidence validation: "
-                       "Cohort A (500) full alignment (age+income+race match BTA); "
-                       "Cohort B (500) race diverges (age+income match, ZIP-inferred "
-                       "race differs from BTA dominant); "
-                       "Cohort C (500) income conflict (ZIP-inferred income contradicts "
-                       "customer income, triggering LLM custom archetype).",
+                       "across three deliberate cohorts anchored to BTA_00 "
+                       "(dominant_household_income_tier=50-99k, White): "
+                       "Cohort A (500) full alignment (White ZIP, 50-99k HH income → Case A high); "
+                       "Cohort B (500) race diverges (Hispanic ZIP, 50-99k HH income → Case B medium); "
+                       "Cohort C (500) income conflict (Hispanic ZIP, 20-49k HH income → Case C low).",
         "n_customers":    1500,
         "sector":         None,
         "coverage_level": "high",
@@ -483,9 +483,6 @@ def _generate_base_record(
     })
 
     # ── Medium coverage: drop journey and engagement fields ───────────────────
-    # For medium coverage records, ~50% chance of dropping each domain.
-    # This produces realistic partial-coverage profiles where a company
-    # has behavioral data but limited lifecycle and comms tracking.
     if coverage_level == "medium":
         if rng.random() < 0.50:
             journey_fields = [
@@ -590,17 +587,14 @@ def _inject_edge_cases(records: list[dict], rng: random.Random) -> list[dict]:
     for i in range(15, min(20, n)):
         records[safe_idx(i)]["customer_id"] = records[safe_idx(i - 15)]["customer_id"]
 
-    # Shorthand time values — injected directly into days_since_active
-    # so _expand_shorthand() is actually exercised by the normalizer.
-    # last_active_date is cleared to force the days path.
+    # Shorthand time values
     for i in range(20, min(25, n)):
         records[safe_idx(i)]["last_active_date"] = None
         records[safe_idx(i)]["days_since_active"] = rng.choice(
             ["4m", "2w", "90d", "1y", "3m"]
         )
 
-    # Shorthand magnitude values — injected into mrr and ltv
-    # so _expand_shorthand() magnitude expansion is exercised.
+    # Shorthand magnitude values
     for i in range(25, min(30, n)):
         records[safe_idx(i)]["mrr"] = rng.choice(
             ["1.2k", "2.5k", "500", "0.8k", "3k"]
@@ -609,8 +603,7 @@ def _inject_edge_cases(records: list[dict], rng: random.Random) -> list[dict]:
             ["10k", "25k", "5.5k", "2k", "50k"]
         )
 
-    # Percentage strings — injected into known rate fields
-    # so _expand_shorthand() percentage-to-proportion conversion is exercised.
+    # Percentage strings
     for i in range(30, min(35, n)):
         records[safe_idx(i)]["discount_usage_pct"] = rng.choice(
             ["45%", "20%", "0%", "75%", "10.5%"]
@@ -644,7 +637,6 @@ def _inject_edge_cases(records: list[dict], rng: random.Random) -> list[dict]:
     return records
 
 
-
 def _apply_zip_enrichment_cohort(
     record: dict,
     i: int,
@@ -656,43 +648,46 @@ def _apply_zip_enrichment_cohort(
     ZIP enrichment validation cases for the zip_enrichment_demo scenario.
 
     Splits customers into three equal cohorts:
-        Cohort A (first third)  — full alignment: White ZIP, high income
-        Cohort B (middle third) — race diverges: Hispanic ZIP, mid income
-        Cohort C (last third)   — income conflict: low-income ZIP, high income
+        Cohort A (first third)  — full alignment: White ZIP, 50-99k HH income
+        Cohort B (middle third) — race diverges: Hispanic ZIP, 50-99k HH income
+        Cohort C (last third)   — income conflict: Hispanic ZIP, 20-49k HH income
 
     Each cohort is designed to trigger a specific BTA confidence validation
     case (A=high, B=medium, C=low/LLM archetype) when ZIP enrichment runs.
+
+    Cohort design anchored to BTA_00 (dominant_household_income_tier=50-99k,
+    dominant_race_eth=White). ZIP enrichment compares zip_inferred_income_tier
+    (ZCTA household income) against dominant_household_income_tier on the BTA.
     """
     cohort_size = n_total // 3
 
     if i < cohort_size:
         # ── Cohort A — Full alignment ─────────────────────────────────────────
-        # White-dominant, high-income ZIP + matching customer demographics
-        # → BTA_02 (Educated Affluent Homeowners) or BTA_00 confirmed
+        # White-dominant ZIP, 50-99k HH income → matches BTA_00 on both
+        # income AND race → Case A (high confidence)
         record["zip_code"]       = rng.choice(ZIP_COHORT_A)
         record["age"]            = rng.randint(35, 64)
-        record["income_annual"]  = round(rng.uniform(100_000, 199_000))
+        record["income_annual"]  = round(rng.uniform(20_000, 49_000))
         record["housing_tenure"] = "Owner"
         record["gender"]         = rng.choice(["Male", "Female"])
 
     elif i < cohort_size * 2:
         # ── Cohort B — Race diverges ──────────────────────────────────────────
-        # Hispanic-dominant ZIP but customer income matches BTA_03 (White, 50-99k)
-        # ZIP-inferred race will diverge from BTA dominant race → medium confidence
+        # Hispanic-dominant ZIP, 50-99k HH income → income matches BTA_00
+        # but ZIP race diverges from BTA_00 dominant (White) → Case B (medium)
         record["zip_code"]       = rng.choice(ZIP_COHORT_B)
         record["age"]            = rng.randint(35, 44)
-        record["income_annual"]  = round(rng.uniform(50_000, 99_000))
+        record["income_annual"]  = round(rng.uniform(20_000, 49_000))
         record["housing_tenure"] = rng.choice(["Owner", "Renter"])
         record["gender"]         = rng.choice(["Male", "Female"])
 
     else:
         # ── Cohort C — Income conflict ────────────────────────────────────────
-        # Low-income ZIP (20-49k) but customer has high income (100-199k)
-        # ZIP-inferred income will conflict with structural match → low confidence
-        # → LLM custom archetype builder invoked
+        # Hispanic-dominant ZIP, 20-49k HH income → conflicts with BTA_00
+        # HH tier (50-99k) → Case C (low confidence) → LLM archetype invoked
         record["zip_code"]       = rng.choice(ZIP_COHORT_C)
         record["age"]            = rng.randint(25, 54)
-        record["income_annual"]  = round(rng.uniform(100_000, 199_000))
+        record["income_annual"]  = round(rng.uniform(20_000, 49_000))
         record["housing_tenure"] = "Owner"
         record["gender"]         = rng.choice(["Male", "Female"])
 
