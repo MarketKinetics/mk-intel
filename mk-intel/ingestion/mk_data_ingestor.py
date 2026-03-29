@@ -1621,6 +1621,27 @@ class MKDataIngestor:
                 f"Both TAs are generated — review TAR scores before acting."
                 if is_tied else None
             ),
+
+            # ── ZIP enrichment signals (cell-level modal values) ──────────────
+            # Carried forward from normalized records for TAR pre-filter use.
+            "zip_inferred_income_tier": (
+                cell_df["zip_inferred_income_tier"].mode().iloc[0]
+                if "zip_inferred_income_tier" in cell_df.columns
+                and cell_df["zip_inferred_income_tier"].notna().any()
+                else None
+            ),
+            "zip_inferred_race_eth": (
+                cell_df["zip_inferred_race_eth"].mode().iloc[0]
+                if "zip_inferred_race_eth" in cell_df.columns
+                and cell_df["zip_inferred_race_eth"].notna().any()
+                else None
+            ),
+            "bta_race_validation": (
+                cell_bta_rows["bta_race_validation"].mode().iloc[0]
+                if not cell_bta_rows.empty
+                and "bta_race_validation" in cell_bta_rows.columns
+                else "not_available"
+            ),
         }
 
         return ta_card

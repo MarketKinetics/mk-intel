@@ -26,7 +26,7 @@ of design reasoning.
 | P1.2 | Synthetic data generator | ✅ Complete |
 | P1.2 | Ingestion tests | ✅ Complete |
 | P1.2 | Demo notebooks (12-13) | ✅ Complete |
-| P1.2 | Change naming conventions (TAAW -> TAR) | ⏳ Pending |
+| P1.2 | Change naming conventions (TAAW -> TAR) and TA_01 (these are the targets coming out from company data) to something less confusing like ComTA or clusters etc | ⏳ Pending |
 | P2 | FastAPI backend | ⏳ Pending |
 | P3 | TAR generation | ⏳ Pending |
 | P4 | Scoring + ranking | ⏳ Pending |
@@ -351,3 +351,8 @@ Override and reason logged to `cluster_stats.json` as auditable record.
 
 ### TO TRACK:
 if MK Intel expands to domains where behavioral data is predominantly categorical (e.g. survey response data, CRM tag data), revisit K-Prototypes or UMAP+HDBSCAN at that point.
+
+
+# To implement at the end of Notebook 14
+- Worth adding a more specific keyword like "cancellation attempt" or "cancel attempt" that maps to a retention-focused rule set. Add to ROADMAP.
+-  hardgates implementation in mk_tar_prefiltering. but needs discussion first
