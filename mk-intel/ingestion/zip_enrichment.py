@@ -421,7 +421,7 @@ Do not include any explanation or preamble.
         profile = {}
 
     # Add provenance metadata
-    profile["segment_id"] = f"CUSTOM_{cluster_id:02d}_{bta_id}"
+    profile["segment_id"] = f"CUSTOM_{cluster_id:02d}_{cluster_signals.get('matched_bta', 'UNK')}"
     profile["source_type"]         = "llm_inferred_custom_archetype"
     profile["source_cluster_id"]   = cluster_id
     profile["source_signals"]      = cluster_signals

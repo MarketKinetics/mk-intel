@@ -106,13 +106,14 @@ Records fall below a `bta_eligible` threshold if structural coverage is under 35
 
 ### ZIP code enrichment
 
-An optional enrichment layer cross-checks BTA assignments against ZIP-level demographic baselines (ACS 5-year ZCTA estimates). It produces a confidence validation:
+An optional enrichment layer cross-checks BTA assignments against ZIP-level demographic baselines (ACS 5-year ZCTA estimates). It produces a confidence validation with four cases:
 
-- **Case A** — full alignment (income + race match): high confidence
-- **Case B** — partial alignment (income matches, race diverges): medium confidence
-- **Case C** — income conflict: low confidence, LLM generates a custom archetype
+- **Case A** — full alignment (age + race + income all match BTA): high confidence
+- **Case B1** — income diverges (age + race match, ZIP household income conflicts): medium confidence
+- **Case B2** — race diverges (age + income match, ZIP demographic profile differs): medium confidence
+- **Case C** — full conflict (no reliable structural anchor): low confidence, LLM generates a custom archetype
 
-ZIP enrichment is disabled in banking and EU GDPR modes due to disparate impact risk.
+ZIP enrichment is disabled in banking and EU GDPR modes due to disparate impact risk. ZIP-inferred race is never used as a targeting criterion — only as a validation signal.
 
 ---
 
@@ -121,6 +122,22 @@ ZIP enrichment is disabled in banking and EU GDPR modes due to disparate impact 
 ### Session model
 
 Each analysis run is a session: one company → one objective (OBJ) → N supporting objectives (SOBJs) → M audience reports per SOBJ. Session state is persisted as JSON and supports iterative SOBJ refinement across requests.
+
+### TAR pre-filter and profile refinement
+
+Before generating a full Target Audience Report (TAR), the platform runs a two-stage pre-filter:
+
+**Stage 1 — Profile refinement.** Each TA card is refined by the LLM for the specific company and product context. The refinement scope depends on the ZIP confidence case:
+- Case A: full contextual refinement of psychographic, media, and messaging descriptors
+- Case B1: income-related descriptors adjusted to reflect ZIP-inferred household income
+- Case B2: cultural and media layer adjusted to reflect ZIP-inferred demographic context
+- Case C: no refinement — custom archetypes are already LLM-generated; passed through with a confidence penalty
+
+Structural fields (age, income, tenure, education) are always locked from real data. The LLM only touches descriptive and contextual fields. All output stays at population segment level — no price points or tactical predictions.
+
+**Stage 2 — Candidate shortlisting.** For each SOBJ, a rule engine scores each refined TA card on likelihood of performing the desired behavior. SOBJ vocabulary is matched to behavioral signals on the TA card (churn risk, LTV, subscription status, NPS, feature adoption, etc.). An LLM fallback handles SOBJs not matched by keyword rules. The top candidates per SOBJ — typically 3-4 — proceed to full TAR generation.
+
+This stage reduces the number of TARs generated from O(TAs × SOBJs) to a manageable shortlist, avoiding expensive generation for implausible combinations.
 
 ### Scoring algorithm
 
@@ -154,3 +171,7 @@ The composite score is multiplied by an audience size modifier (0.85–1.15, sca
 **Transparent scoring.** The algorithm produces ranked lists with full dimension breakdowns. Every score is explainable — no black-box outputs.
 
 **Compliance as a first-class concern.** Compliance mode is set at ingestion time and gates are applied automatically throughout. The platform does not rely on analyst recall for compliance rules.
+
+**Pre-filter before generate.** Running TAR generation on every possible (audience, SOBJ) combination is expensive and produces noise. A rule-based pre-filter shortlists only plausible candidates before any generation call. Weak candidates that slip through are handled by the TAR effectiveness gate and scoring algorithm — the pre-filter is deliberately coarse.
+
+**LLM refines, data grounds.** The LLM contextualizes audience profiles for company and product context — it does not override real data signals. Company data beats ZIP inference beats BTA baseline beats LLM speculation. This hierarchy is enforced structurally: fields derived from real data are locked before LLM prompts are constructed.
