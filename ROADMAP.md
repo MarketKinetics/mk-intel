@@ -353,6 +353,38 @@ Override and reason logged to `cluster_stats.json` as auditable record.
 if MK Intel expands to domains where behavioral data is predominantly categorical (e.g. survey response data, CRM tag data), revisit K-Prototypes or UMAP+HDBSCAN at that point.
 
 
-# To implement at the end of Notebook 14
-- Worth adding a more specific keyword like "cancellation attempt" or "cancel attempt" that maps to a retention-focused rule set. Add to ROADMAP.
--  hardgates implementation in mk_tar_prefiltering. but needs discussion first
+## Phase 7 — Performance and UX Optimization
+
+### P7.1 — Pipeline latency reduction
+
+**Quick wins (post-MVP, low effort):**
+- Parallel LLM calls for independent TAR sections — accessibility and
+  traceability do not depend on narrative and can run concurrently.
+  Target: reduce per-TAR generation time by ~25%.
+- Refined profile caching — hash the TA card + company context and skip
+  LLM refinement on re-runs where inputs haven't changed.
+- Batch profile refinement — current implementation makes one Haiku call
+  per TA card. A single call with all TA cards in one prompt would reduce
+  latency and cost for large ingestion runs.
+
+**Larger architectural moves (pre-production):**
+- Streaming LLM responses — pipe section output to the UI as it generates
+  rather than waiting for the full response. Requires async architecture.
+- Background job queue — decouple UX from generation latency. User submits
+  a pipeline run, gets notified (email/webhook) when TARs are ready.
+  Eliminates the "waiting for LLM" problem entirely from the user's perspective.
+- Model tiering — use Sonnet for the first TAR per session (highest quality,
+  sets the benchmark) and Haiku for remaining TARs. Reduces cost and latency
+  for sessions with many candidates without sacrificing output quality on the
+  highest-priority TAR.
+
+### P7.2 — Demo UX
+
+- Section-level progress indicator during TAR generation:
+  "Analyzing effectiveness... conditions... vulnerabilities..."
+  A 2-minute wait with visible progress feels fast.
+  A 2-minute spinner feels broken.
+- Estimated time remaining display based on candidate count and
+  average section generation time from prior runs.
+- Incremental TAR display — show each completed TAR as it finishes
+  rather than waiting for the full batch.
