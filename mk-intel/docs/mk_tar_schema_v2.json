@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "mk_taaw_schema_v2",
+  "$id": "mk_tar_schema_v2",
   "title": "Target Audience Analysis Worksheet",
   "description": "MK canonical schema for a single TA analyzed against a single SOBJ",
   "type": "object",
@@ -14,7 +14,7 @@
       "required": ["schema_version", "document_id", "created_at", "status"],
       "properties": {
         "schema_version":  { "type": "string", "const": "2.0" },
-        "document_id":     { "type": "string", "description": "e.g. TAAW-OBJ01-SOBJ02-TA03" },
+        "document_id":     { "type": "string", "description": "e.g. TAR-OBJ01-SOBJ02-CS01_BTA03" },
         "created_at":      { "type": "string", "format": "date" },
         "last_updated":    { "type": "string", "format": "date" },
         "status":          { "type": "string", "enum": ["draft", "review", "approved"] },

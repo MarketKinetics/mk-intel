@@ -26,10 +26,10 @@ of design reasoning.
 | P1.2 | Synthetic data generator | ✅ Complete |
 | P1.2 | Ingestion tests | ✅ Complete |
 | P1.2 | Demo notebooks (12-13) | ✅ Complete |
-| P1.2 | Change naming conventions (TAAW -> TAR) and TA_01 (these are the targets coming out from company data) to something less confusing like ComTA or clusters etc | ⏳ Pending |
+| P1.2 | Change naming conventions (TAAW -> TAR) and TA_01 (these are the targets coming out from company data) to something less confusing like ComTA or clusters etc | ✅ Complete |
 | P2 | FastAPI backend | ⏳ Pending |
-| P3 | TAR generation | ⏳ Pending |
-| P4 | Scoring + ranking | ⏳ Pending |
+| P3 | TAR generation | ✅ Complete |
+| P4 | Scoring + ranking | ✅ Complete |
 | P5 | Streamlit / React frontend | ⏳ Pending |
 | P6 | Demo auth + quota system | ⏳ Pending |
 
@@ -98,7 +98,7 @@ CREATE TABLE demo_sessions (
 
 CREATE TABLE recruiter_codes (
     code            TEXT PRIMARY KEY,
-    label           TEXT,           -- e.g. "Google_recruiter_March2026"
+    label           TEXT,           -- e.g. "companyXX_role_March2026"
     created_at      TEXT,
     used_at         TEXT,
     used_by_email   TEXT,
@@ -354,6 +354,8 @@ if MK Intel expands to domains where behavioral data is predominantly categorica
 
 
 ## Phase 7 — Performance and UX Optimization
+
+**Priority: High**
 
 ### P7.1 — Pipeline latency reduction
 

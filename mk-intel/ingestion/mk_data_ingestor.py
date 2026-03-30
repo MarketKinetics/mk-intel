@@ -197,7 +197,7 @@ class MKDataIngestor:
     Proprietary data ingestion orchestrator for MK Intel.
 
     Manages the full pipeline from raw company file to TA cards
-    ready for TAAW generation.
+    ready for TAR generation.
 
     Args:
         session           : active MKSession
@@ -1032,7 +1032,7 @@ class MKDataIngestor:
             for _, row in self._df_bta.iterrows():
                 cid   = int(row.get("cluster_id", -1))
                 bta   = row.get("bta_id")
-                ta_id = f"TA_{cid:02d}_{bta}" if bta else None
+                ta_id = f"CS{cid:02d}_{bta}" if bta else None
                 if ta_id and ta_id in valid_ta_ids:
                     segment_mapping[str(row["customer_id"])] = ta_id
                 # Customers in thin cells or non-US: no segment mapping entry
@@ -1497,10 +1497,10 @@ class MKDataIngestor:
             - Coverage and confidence metadata
             - Source BTA reference
 
-        TA ID format: TA_{cluster_id:02d}_{bta_id}
-        e.g. TA_02_BTA_03
+        TA ID format: CS{cluster_id:02d}_{bta_id}
+        e.g. CS02_BTA_03
         """
-        ta_id = f"TA_{cluster_id:02d}_{bta_id}"
+        ta_id = f"CS{cluster_id:02d}_{bta_id}"
 
         # ── Get BTA baseline row ──────────────────────────────────────────────
         bta_row = bta_baseline[bta_baseline["segment_id"] == bta_id]

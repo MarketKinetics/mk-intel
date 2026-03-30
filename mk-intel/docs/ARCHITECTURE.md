@@ -47,7 +47,7 @@ The ACS adult population is clustered using K-Prototypes — an algorithm design
 
 Household income is retained as a contextual descriptor on each archetype card — it surfaces meaningful signals like multi-earner households or economic dependency — but it does not drive segmentation.
 
-**k=7 was selected** based on balance (imbalance ratio 4.10, best of three candidates) and cost reduction. All seven clusters represent at least 5.4% of the U.S. adult population, ensuring every archetype is a substantial and targetable group.
+**k=7 was selected** based on balance (imbalance ratio 4.10, best of candidates) and cost reduction. All seven clusters represent at least 5.4% of the U.S. adult population, ensuring every archetype is a substantial and targetable group.
 
 ### The seven archetypes
 
@@ -65,7 +65,7 @@ Household income is retained as a contextual descriptor on each archetype card �
 
 Each archetype is represented as a BTA (Baseline Target Audience) card — a structured intelligence object that contains structural descriptors, psychological signals, media signals, LLM-generated summaries, and a RAG-ready text representation. Cards are stored in ChromaDB using `all-MiniLM-L6-v2` embeddings for semantic retrieval.
 
-**Signal direction matters.** Psychological signals are deviations from the national baseline — a cluster can be above or below baseline on any trait. Direction is preserved in prompts passed to the LLM. A cluster that is distinctly *non*-Republican is described accurately as such, not mischaracterized as Republican-leaning. This distinction required explicit design: trait labels without direction are ambiguous and produce incorrect LLM interpretations.
+**Signal direction matters.** Psychological signals are deviations from the national baseline — a cluster can be above or below baseline on any trait. Direction is preserved in prompts passed to the LLM. This distinction required explicit design: trait labels without direction are ambiguous and produce incorrect LLM interpretations.
 
 ---
 
@@ -155,6 +155,24 @@ Four hard gates screen out disqualified audiences before scoring begins (insuffi
 The composite score is multiplied by an audience size modifier (0.85–1.15, scaled by estimate confidence), producing a final score used to rank all audiences for each SOBJ.
 
 **Weights are explicitly labeled as placeholders** and must be calibrated against known-good rankings before production use. The dimension breakdown is always included in output so rankings are auditable.
+
+### TAR generation
+
+Each Target Audience Report is generated in 8 sequential LLM calls — one per schema section (effectiveness, conditions, vulnerabilities, susceptibility, accessibility, narrative and actions, assessment, traceability). Sequential calls allow each section to receive prior sections as context, enabling internally consistent cross-referencing between condition IDs, vulnerability IDs, argument IDs, and action IDs.
+
+Every factual claim in the TAR is source-tagged: `company_data`, `bta_baseline`, `zip_inference`, or `llm_inference`. This makes the evidential basis of every claim visible to the analyst — data-grounded claims can be acted on immediately, `llm_inference` claims flag for validation before scaling.
+
+The effectiveness gate (`rating > 2`) is enforced deterministically in Python after parsing — never trusted to the LLM. Gate-failed TARs are saved with a disqualification reason rather than discarded.
+
+### Naming conventions
+
+| Entity | ID format | Example |
+|---|---|---|
+| Baseline archetype | `BTA_XX` | `BTA_06` |
+| Company segment | `CSXX_BTA_XX` | `CS01_BTA_06` |
+| TAR document | `TAR-SOBJXX-CSXX_BTA_XX` | `TAR-SOBJ01-CS01_BTA_06` |
+
+`CS` (Company Segment) distinguishes business-specific audience clusters from baseline `BTA` archetypes. The cluster ID and BTA ID are both preserved in the CS identifier — they carry different information and both matter downstream.
 
 ---
 

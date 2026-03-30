@@ -16,8 +16,8 @@ from enum import Enum
 
 
 # ---------------------------------------------------------------------------
-# Data contracts (lightweight versions of the full TAAW schema objects)
-# These would be populated from parsed TAAW JSON in the real system
+# Data contracts (lightweight versions of the full TAR schema objects)
+# These would be populated from parsed TAR JSON in the real system
 # ---------------------------------------------------------------------------
 
 class AlignmentDirection(Enum):
@@ -36,7 +36,7 @@ class SOBJDirection(Enum):
 
 @dataclass
 class EffectivenessInput:
-    """Derived from TAAW.effectiveness section"""
+    """Derived from TAR.effectiveness section"""
     rating: int                        # 0-5, analyst-assigned
     decision_rights_score: int         # 0-3: 0=none, 1=partial, 2=full, 3=full+influence
     resource_access_score: int         # 0-2: 0=blocked, 1=partial, 2=available
@@ -47,7 +47,7 @@ class EffectivenessInput:
 
 @dataclass
 class SusceptibilityInput:
-    """Derived from TAAW.susceptibility section"""
+    """Derived from TAR.susceptibility section"""
     rating: int                         # 1-5, analyst-assigned
     reward_count: int                   # number of perceived rewards identified
     reward_salience: float              # avg salience: low=1, medium=2, high=3
@@ -58,7 +58,7 @@ class SusceptibilityInput:
 
 @dataclass
 class VulnerabilityInput:
-    """Derived from TAAW.vulnerabilities section"""
+    """Derived from TAR.vulnerabilities section"""
     motive_count: int                   # total motives identified
     critical_motive_count: int          # motives with priority='critical'
     sourced_motive_count: int           # motives with a source or condition link
@@ -71,13 +71,13 @@ class VulnerabilityInput:
 
 @dataclass
 class AccessibilityInput:
-    """Derived from TAAW.accessibility section"""
+    """Derived from TAR.accessibility section"""
     channels: list                      # list of dicts: {reach_quality: int, violates_restrictions: bool}
 
 
 @dataclass
 class AudienceSizeInput:
-    """Derived from TAAW.header.target_audience.audience_size_estimate"""
+    """Derived from TAR.header.target_audience.audience_size_estimate"""
     value: Optional[float] = None
     unit: str = "individuals"
     confidence: str = "low"
