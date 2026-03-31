@@ -2,11 +2,12 @@ from fastapi import FastAPI
 from backend.config import settings
 from backend.celery_app import celery_app
 from backend.db.jobs import init_db
-from backend.routers import sessions
+from backend.routers import sessions, pipeline
 import redis
 
 app = FastAPI(title=settings.app_name, version=settings.app_version)
 app.include_router(sessions.router)
+app.include_router(pipeline.router)
 
 
 @app.on_event("startup")
