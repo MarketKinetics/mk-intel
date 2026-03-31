@@ -1,4 +1,6 @@
 from celery import Celery
+from dotenv import load_dotenv
+load_dotenv()
 from backend.config import settings
 
 celery_app = Celery(
