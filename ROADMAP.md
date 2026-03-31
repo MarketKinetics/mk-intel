@@ -9,7 +9,7 @@ of design reasoning.
 
 ## Current Status
 
-| Phase | Component | Status |
+
 |---|---|---|
 | P0 | Societal baseline pipeline (notebooks 01-11) | ✅ Complete |
 | P0 | BTA cards + RAG corpus | ✅ Complete |
@@ -23,13 +23,27 @@ of design reasoning.
 | P1.2 | Coverage scoring | ✅ Complete |
 | P1.2 | Normalizer | ✅ Complete |
 | P1.2 | Data ingestor | ✅ Complete |
-| P1.2 | Synthetic data generator | ✅ Complete |
+| P1.2 | Synthe| Phase | Component | Status |tic data generator | ✅ Complete |
 | P1.2 | Ingestion tests | ✅ Complete |
 | P1.2 | Demo notebooks (12-13) | ✅ Complete |
 | P1.2 | Change naming conventions (TAAW -> TAR) and TA_01 (these are the targets coming out from company data) to something less confusing like ComTA or clusters etc | ✅ Complete |
-| P2 | FastAPI backend | ⏳ Pending |
+| P2 | FastAPI backend — B0 skeleton | ✅ Complete |
+| P2 | FastAPI backend — B1/B2 session endpoints | ✅ Complete |
+| P2 | FastAPI backend — B3 ingestion pipeline | ✅ Complete |
+| P2 | FastAPI backend — B4 prefilter + TAR generation + scoring | ✅ Complete |
+| P2 | FastAPI backend — TAR executive summary (JSON + HTML) | ✅ Complete |
+| P2 | FastAPI backend — B5 demo auth + quota | ⏳ Pending |
+| P2 | FastAPI backend — B6 Railway deployment | ⏳ Pending |
 | P3 | TAR generation | ✅ Complete |
 | P4 | Scoring + ranking | ✅ Complete |
+| P5 | React frontend | ⏳ Pending |
+| P5 | Frontend — session setup flow (company, OBJ, SOBJs) | ⏳ Pending |
+| P5 | Frontend — file upload + ingestion progress | ⏳ Pending |
+| P5 | Frontend — TA cards view | ⏳ Pending |
+| P5 | Frontend — TAR ranked output view | ⏳ Pending |
+| P5 | Frontend — TAR executive summary card (audience_name prominent, verdict badge, top actions, key risk) | ⏳ Pending |
+| P5 | Frontend — full TAR detail view (all 8 sections, source tags visible) | ⏳ Pending |
+| P6 | Demo auth + quota system | ⏳ Pending |
 | P5 | Streamlit / React frontend | ⏳ Pending |
 | P6 | Demo auth + quota system | ⏳ Pending |
 
