@@ -7,13 +7,13 @@ This is the spine of the entire MK Intel pipeline.
 Every phase reads from and writes to a MKSession object.
 
 A session represents one complete analysis run:
-    one company → one OBJ → N SOBJs → M TAAWs per SOBJ
+    one company → one OBJ → N SOBJs → M TARs per SOBJ
 
 Design principles:
     - Every field has a clear owner (which phase writes it)
     - Status enum prevents phases from running out of order
     - All fields are serializable to JSON (no custom objects)
-    - Confidence flows through: company → OBJ → SOBJs → TAAWs
+    - Confidence flows through: company → OBJ → SOBJs → TARs
     - Sensitive fields (api_key, demo_token) are never serialized to disk
 
 Session modes (see mk_intel/utils.py for full documentation):
@@ -45,7 +45,7 @@ class SessionStatus(str, Enum):
     OBJ_SET             = "obj_set"             # objective validated
     SOBJS_APPROVED      = "sobjs_approved"      # all SOBJs confirmed by user
     DATA_INGESTED       = "data_ingested"       # proprietary data processed (optional)
-    TAAWS_GENERATED     = "taaws_generated"     # all TAAWs produced and scored
+    TARS_GENERATED      = "tars_generated"      # all TARs produced and scored
     COMPLETED           = "completed"           # final output delivered
 
 
@@ -120,7 +120,7 @@ class ProprietaryDataset:
 class ScoredTA:
     """
     One scored (TA, SOBJ) pair — the output of the scoring algorithm.
-    Written by: TAAW generation + scoring step (Phase 3).
+    Written by: TAR generation + scoring step (Phase 3).
     """
     ta_id:              str                     # e.g. "BTA_00"
     sobj_id:            str                     # e.g. "SOBJ-01"
@@ -133,8 +133,8 @@ class ScoredTA:
     gate_passed:        bool                    = True
     gate_failure_reason:Optional[str]           = None
     recommendation:     Optional[str]           = None  # plain-language priority note
-    taaw:               Optional[dict]          = None  # full TAAW JSON (schema v2)
-    taaw_confidence:    str                     = "low" # low/medium/high — data vs baseline only
+    tar:                Optional[dict]          = None  # full TAR JSON (schema v2)
+    tar_confidence:     str                     = "low" # low/medium/high — data vs baseline only
     generated_at:       Optional[str]           = None  # ISO timestamp
 
 
@@ -161,7 +161,7 @@ class MKSession:
 
     Lifecycle:
         CREATED → COMPANY_IDENTIFIED → OBJ_SET → SOBJS_APPROVED
-        → DATA_INGESTED (optional) → TAAWS_GENERATED → COMPLETED
+        → DATA_INGESTED (optional) → TARS_GENERATED → COMPLETED
 
     Usage:
         session = MKSession.new()
@@ -298,8 +298,8 @@ class MKSession:
             SessionStatus.COMPANY_IDENTIFIED: SessionStatus.OBJ_SET,
             SessionStatus.OBJ_SET:            SessionStatus.SOBJS_APPROVED,
             SessionStatus.SOBJS_APPROVED:     SessionStatus.DATA_INGESTED,
-            SessionStatus.DATA_INGESTED:      SessionStatus.TAAWS_GENERATED,
-            SessionStatus.TAAWS_GENERATED:    SessionStatus.COMPLETED,
+            SessionStatus.DATA_INGESTED:      SessionStatus.TARS_GENERATED,
+            SessionStatus.TARS_GENERATED:     SessionStatus.COMPLETED,
         }
         expected = valid_transitions.get(self.status)
         if to_status != expected:
@@ -312,7 +312,7 @@ class MKSession:
 
     def skip_data_ingestion(self) -> None:
         """
-        Advance from SOBJS_APPROVED directly to TAAWS_GENERATED
+        Advance from SOBJS_APPROVED directly to TARS_GENERATED
         when no proprietary data is available.
         Analysis runs on baseline BTAs only.
         """
@@ -325,7 +325,7 @@ class MKSession:
             ingest_notes="No proprietary data provided. Analysis uses baseline BTAs only.",
             confidence="low",
         )
-        self.status = SessionStatus.TAAWS_GENERATED
+        self.status = SessionStatus.TARS_GENERATED
         self.updated_at = datetime.now(timezone.utc).isoformat()
 
 
