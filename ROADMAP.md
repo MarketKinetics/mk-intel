@@ -404,3 +404,14 @@ if MK Intel expands to domains where behavioral data is predominantly categorica
   average section generation time from prior runs.
 - Incremental TAR display — show each completed TAR as it finishes
   rather than waiting for the full batch.
+
+  ---
+  ### Data retention and privacy
+
+- Raw CSVs and derived outputs retained privately per session for
+  platform refinement. Never shared or sold.
+- Upload notice shown at ingestion time.
+- Deletion endpoint available on request.
+- If platform scales beyond demo: implement formal DPA template,
+  GDPR subject access request flow, and data retention schedule.
+---

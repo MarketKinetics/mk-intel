@@ -1,30 +1,40 @@
+# Python
 venv/
 __pycache__/
+*.pyc
+*.pyo
+
+# Environment
 .env
-doctrine_raw/
-vector_db/
+.env.*
+
+# Data — never commit raw or processed customer data
 data/
-*.sqlite
-*.db
-.DS_Store
-
-
-~.docx
-
-~.docx
-*.docx
-data/company_data/*/raw/
-data/company_data/*/normalized/
-data/company_data/*/enriched/
-
-# Exclude company data and raw datasets
-data/company_data/
-data/societal_raw/
-
-# But keep platform reference assets
 !data/reference/
 !data/reference/zcta_enrichment.parquet
 
-echo "core/doctrine/" >> .gitignore
-echo "docs/" >> .gitignore
-echo "mk-intel/*.pdf" >> .gitignore
+# Databases
+*.sqlite
+*.db
+
+# OS
+.DS_Store
+
+# Raw doctrine and vector store
+doctrine_raw/
+core/doctrine/
+vector_db/
+
+# Office temp files
+~*.docx
+*.docx
+
+# Internal docs (not for public repo)
+docs/
+
+# PDFs
+mk-intel/docs/*.pdf
+mk-intel/*.pdf
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
