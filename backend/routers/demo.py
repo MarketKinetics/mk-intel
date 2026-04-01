@@ -13,7 +13,8 @@ from backend.db.demo import (
 router = APIRouter(prefix="/demo", tags=["demo"])
 admin_router = APIRouter(prefix="/admin", tags=["admin"])
 
-ADMIN_KEY = os.environ.get("ADMIN_KEY", "change-me-in-env")
+from backend.config import settings
+ADMIN_KEY = settings.admin_key
 
 
 class DemoRequest(BaseModel):
@@ -93,8 +94,8 @@ def request_demo(body: DemoRequest, request: Request):
         email      = body.email or "",
         ip_address = ip,
         access_type = "demo",
-        quota_runs  = 2,
-        quota_tokens = 30000,
+        quota_runs  = 1,
+        quota_tokens = 200000,
         token_override = identity,
     )
     session = get_demo_session(token)

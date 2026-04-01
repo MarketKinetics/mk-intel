@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     # Anthropic
     anthropic_api_key: str
 
+    # Admin
+    admin_key: str = "change-me-in-env"
+
     # Paths
     project_root: Path = Path(__file__).resolve().parents[1]
 

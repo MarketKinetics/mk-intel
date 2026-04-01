@@ -65,7 +65,7 @@ def create_demo_session(
 ) -> str:
     token      = token_override if token_override else secrets.token_urlsafe(32)
     now        = datetime.now(timezone.utc).isoformat()
-    expires_at = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
     with get_conn() as conn:
         conn.execute("""
             INSERT INTO demo_sessions

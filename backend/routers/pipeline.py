@@ -1,6 +1,6 @@
 import sys
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Request
 from backend.config import settings
 from backend.db.jobs import create_job, get_job, get_jobs_for_session
 from backend.models.responses import JobStatusResponse
@@ -134,7 +134,7 @@ def get_candidates(session_id: str):
 
 
 @router.post("/{session_id}/generate")
-def generate(session_id: str):
+def generate(session_id: str, request: Request):
     session = _load_session(session_id)
     company_name = session.company.name if session.company else "unknown"
     slug = company_name.lower().replace(" ", "_")
@@ -145,9 +145,21 @@ def generate(session_id: str):
     if not (enriched_dir / "tar_candidates.json").exists():
         raise HTTPException(status_code=400, detail="Run prefilter first")
 
+    # Demo quota check
+    demo_token = request.headers.get("X-Demo-Token")
+    if demo_token:
+        from backend.db.demo import check_quota
+        allowed, reason = check_quota(demo_token)
+        if not allowed:
+            raise HTTPException(status_code=402, detail=f"{reason}. To continue, use your own Anthropic API key.")
+
     job_id = create_job(session_id, "generate")
     from backend.tasks.pipeline import run_tar_generation
-    task = run_tar_generation.delay(session_id=session_id, job_id=job_id)
+    task = run_tar_generation.delay(
+        session_id=session_id,
+        job_id=job_id,
+        demo_token=demo_token,
+    )
     from backend.db.jobs import update_job
     update_job(job_id, celery_task_id=task.id)
     return {"job_id": job_id, "status": "pending"}
@@ -206,6 +218,76 @@ def get_rankings(session_id: str):
     if not rankings_path.exists():
         raise HTTPException(status_code=404, detail="Rankings not found — run generate first")
     return json.loads(rankings_path.read_text())
+
+
+def _build_summary_prompt(tar: dict) -> str:
+    eff   = tar.get("effectiveness", {})
+    susc  = tar.get("susceptibility", {})
+    narr  = tar.get("narrative_and_actions", {})
+    vuln  = tar.get("vulnerabilities", {})
+    acc   = tar.get("accessibility", [])
+    hdr   = tar.get("header", {})
+    ta    = hdr.get("target_audience", {})
+    sobj  = hdr.get("supporting_objective", {})
+    assess = tar.get("assessment", {})
+    trace = tar.get("traceability", {})
+    conf  = trace.get("confidence", {})
+
+    top_actions = narr.get("recommended_actions", [])[:3]
+    top_motives = vuln.get("motives", [])[:3]
+    top_channels = [
+        c for c in (acc if isinstance(acc, list) else [])
+        if not c.get("violates_restrictions")
+    ][:3]
+    size_est = ta.get("audience_size_estimate", {})
+
+    return f"""You are a senior marketing strategist. Generate a concise executive summary
+of the following Target Audience Report. The summary should be readable in under 2 minutes
+and actionable for a senior decision-maker.
+
+TAR CONTEXT:
+- Audience: {ta.get("definition")}
+- SOBJ: {sobj.get("statement")}
+- Effectiveness rating: {eff.get("rating")}/5
+- Susceptibility rating: {susc.get("rating")}/5
+- Audience size: {size_est.get("value")} {size_est.get("unit")}
+- Confidence: {conf.get("level")} — {str(conf.get("rationale", ""))[:200]}
+
+TOP MOTIVES:
+{chr(10).join(f"- {m.get('id')}: {m.get('description')} [{m.get('priority')}]" for m in top_motives)}
+
+MAIN ARGUMENT:
+IF: {narr.get("main_argument", {}).get("premise", "")}
+THEN: {narr.get("main_argument", {}).get("consequence", "")}
+
+TOP 3 RECOMMENDED ACTIONS:
+{chr(10).join(f"- {a.get('action_id')}: {str(a.get('description', ''))[:120]}" for a in top_actions)}
+
+TOP CHANNELS:
+{chr(10).join(f"- {c.get('channel_name')} (reach {c.get('reach_quality')}/5)" for c in top_channels)}
+
+KEY RISKS:
+{chr(10).join(f"- {str(r.get('description', ''))[:100]}" for r in eff.get('restrictions', [])[:3])}
+
+BASELINE BEHAVIOR: {str(assess.get("baseline_behavior", ""))[:200]}
+TARGET BEHAVIOR: {str(assess.get("target_behavior", ""))[:200]}
+
+Return a JSON object with this exact structure:
+{{
+    "audience_name":    "short human-friendly name for this audience in this campaign context, 3-5 words, e.g. Loyal Mid-Career Subscribers or Value-Conscious Homeowners. Never use BTA archetype name or cluster ID.",
+    "audience":         "one-line audience description with key stats",
+    "objective":        "SOBJ statement",
+    "verdict":          "FIRST PRIORITY|HIGH PRIORITY|MEDIUM PRIORITY|LOWER PRIORITY — one sentence rationale",
+    "why_this_audience": "2-3 sentences on why this segment matters for this objective",
+    "the_case":         "2-3 sentences summarizing the persuasion logic",
+    "top_actions": [
+        {{"action": "action description", "channel": "channel name", "timing": "when"}}
+    ],
+    "key_risk":         "single most important risk to campaign success",
+    "confidence":       "high|medium|low",
+    "confidence_note":  "one sentence on confidence basis"
+}}
+Return ONLY the JSON object."""
 
 
 @router.get("/{session_id}/tars/{tar_id}/summary")

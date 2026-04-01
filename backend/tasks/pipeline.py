@@ -106,7 +106,7 @@ def run_prefilter(self, session_id: str, job_id: str):
 
 
 @celery_app.task(bind=True)
-def run_tar_generation(self, session_id: str, job_id: str):
+def run_tar_generation(self, session_id: str, job_id: str, demo_token: str = None):
     """Run TAR generation and scoring pipeline."""
     import json
     from pathlib import Path
@@ -190,6 +190,11 @@ def run_tar_generation(self, session_id: str, job_id: str):
         passed = sum(1 for d in tar_documents if d.gate_passed)
         update_job(job_id, status="done",
                    progress=f"Done. {passed}/{len(tar_documents)} TARs passed gate.")
+
+        # Increment demo quota counter
+        if demo_token:
+            from backend.db.demo import increment_demo_usage
+            increment_demo_usage(demo_token, tokens_used=0)
 
     except Exception as e:
         update_job(job_id, status="failed", error=str(e))
