@@ -2,17 +2,22 @@ from fastapi import FastAPI
 from backend.config import settings
 from backend.celery_app import celery_app
 from backend.db.jobs import init_db
+from backend.db.demo import init_demo_db
 from backend.routers import sessions, pipeline
+from backend.routers.demo import router as demo_router, admin_router
 import redis
 
 app = FastAPI(title=settings.app_name, version=settings.app_version)
 app.include_router(sessions.router)
 app.include_router(pipeline.router)
+app.include_router(demo_router)
+app.include_router(admin_router)
 
 
 @app.on_event("startup")
 def startup():
     init_db()
+    init_demo_db()
 
 
 @app.get("/health")
