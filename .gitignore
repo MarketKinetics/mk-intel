@@ -38,3 +38,4 @@ mk-intel/*.pdf
 
 # Notebooks checkpoints
 .ipynb_checkpoints/
+!.env.example
