@@ -48,3 +48,16 @@ mk-command/
 mk-engage/
 mk-product/
 core/
+
+# Societal baseline notebooks (methodology only, data not in repo)
+notebooks/0*.ipynb
+notebooks/1[01]_*.ipynb
+
+# Internal docs
+docs/
+
+# Root requirements
+requirements.txt
+
+# Handoff docs
+MK_Intel_Handoff.md
