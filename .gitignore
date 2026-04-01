@@ -40,3 +40,4 @@ mk-intel/*.pdf
 .ipynb_checkpoints/
 !.env.example
 MK_Intel_Handoff.md
+mk-intel/docs/*.pdf
