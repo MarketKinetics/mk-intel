@@ -41,3 +41,10 @@ mk-intel/*.pdf
 !.env.example
 MK_Intel_Handoff.md
 mk-intel/docs/*.pdf
+
+# Future modules — separate repos
+mk-campaign/
+mk-command/
+mk-engage/
+mk-product/
+core/
