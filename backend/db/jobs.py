@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional
 from backend.config import settings
 
-DB_PATH = settings.project_root / "backend" / "db" / "mk_intel.db"
+DB_PATH = settings.project_root / "vector_db" / "mk_intel.db"
 
 
 def get_conn() -> sqlite3.Connection:
@@ -16,6 +16,7 @@ def get_conn() -> sqlite3.Connection:
 
 def init_db() -> None:
     """Create tables if they don't exist."""
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with get_conn() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS jobs (

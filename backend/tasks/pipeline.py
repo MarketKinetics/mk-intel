@@ -2,7 +2,8 @@ import sys
 from dotenv import load_dotenv
 load_dotenv()
 from backend.celery_app import celery_app
-from backend.db.jobs import update_job
+from backend.db.jobs import update_job, init_db
+init_db()
 from backend.config import settings
 
 sys.path.insert(0, str(settings.project_root))
