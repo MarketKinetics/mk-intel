@@ -33,8 +33,8 @@ def health():
 
     try:
         inspect = celery_app.control.inspect(timeout=2.0)
-        active = inspect.active()
-        worker_status = "ok" if active else "no workers"
+        ping = inspect.ping()
+        worker_status = "ok" if ping else "no workers"
     except Exception as e:
         worker_status = f"error: {e}"
 
