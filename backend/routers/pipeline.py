@@ -567,5 +567,5 @@ def setup_segment_store(admin_key: str):
     import sys
     sys.path.insert(0, str(settings.project_root / "store"))
     from segment_store import load_segments, store_info
-    n = load_segments()
+    n = load_segments(jsonl_path=Path("/app/bta_data/mk_bta_rag_corpus.jsonl"))
     return {"loaded": n, "store_info": store_info()}

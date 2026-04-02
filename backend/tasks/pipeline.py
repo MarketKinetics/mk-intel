@@ -28,7 +28,7 @@ def run_ingestion(self, session_id: str, file_path: str, job_id: str):
 
     SESSIONS_DIR = settings.project_root / "data" / "sessions"
     DATA_DIR     = settings.project_root / "data"
-    ZCTA_PATH    = DATA_DIR / "reference" / "zcta_enrichment.parquet"
+    ZCTA_PATH    = Path("/app/bta_data/zcta_enrichment.parquet")
 
     try:
         update_job(job_id, status="running", progress="Loading session...")
