@@ -1,8 +1,9 @@
 [phases.setup]
-nixPkgs = ["python311", "python311Packages.pip", "gcc"]
+nixPkgs = ["python311", "gcc"]
 
 [phases.install]
 cmds = [
+  "python3.11 -m ensurepip --upgrade",
   "python3.11 -m pip install -r backend/requirements.txt"
 ]
 
