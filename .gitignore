@@ -12,6 +12,11 @@ __pycache__/
 data/
 !data/reference/
 !data/reference/zcta_enrichment.parquet
+!data/societal_processed/
+!data/societal_processed/bta_cards/
+!data/societal_processed/bta_cards/mk_bta_baseline.parquet
+!data/societal_processed/bta_cards/mk_bta_baseline.csv
+!data/societal_processed/bta_cards/mk_bta_rag_corpus.jsonl
 
 # Databases
 *.sqlite
