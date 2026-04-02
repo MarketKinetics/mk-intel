@@ -9,4 +9,4 @@ COPY . .
 
 ENV PYTHONPATH=/app
 
-CMD uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+CMD uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}
