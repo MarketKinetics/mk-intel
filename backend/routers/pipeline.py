@@ -556,3 +556,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 </html>"""
 
     return HTMLResponse(content=html)
+
+
+@router.post("/admin/setup-store")
+def setup_segment_store(admin_key: str):
+    """One-time setup: load BTA segments into ChromaDB."""
+    from backend.config import settings
+    if admin_key != settings.admin_key:
+        raise HTTPException(status_code=403, detail="Invalid admin key")
+    import sys
+    sys.path.insert(0, str(settings.project_root / "store"))
+    from segment_store import load_segments, store_info
+    n = load_segments()
+    return {"loaded": n, "store_info": store_info()}
