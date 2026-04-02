@@ -6,8 +6,8 @@ from backend.db.jobs import create_job, get_job, get_jobs_for_session
 from backend.models.responses import JobStatusResponse
 from backend.tasks.pipeline import run_ingestion
 
-sys.path.insert(0, str(settings.project_root / "mk-intel"))
-sys.path.insert(0, str(settings.project_root / "mk-intel" / "ingestion"))
+sys.path.insert(0, str(settings.project_root))
+sys.path.insert(0, str(settings.project_root / "ingestion"))
 
 from mk_intel_session import MKSession
 
@@ -298,8 +298,8 @@ def get_tar_summary(session_id: str, tar_id: str):
     from dotenv import load_dotenv
     load_dotenv()
 
-    sys.path.insert(0, str(settings.project_root / "mk-intel"))
-    sys.path.insert(0, str(settings.project_root / "mk-intel" / "ingestion"))
+    sys.path.insert(0, str(settings.project_root))
+    sys.path.insert(0, str(settings.project_root / "ingestion"))
 
     session = _load_session(session_id)
     company_name = session.company.name if session.company else "unknown"

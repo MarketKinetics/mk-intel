@@ -5,8 +5,8 @@ from backend.celery_app import celery_app
 from backend.db.jobs import update_job
 from backend.config import settings
 
-sys.path.insert(0, str(settings.project_root / "mk-intel"))
-sys.path.insert(0, str(settings.project_root / "mk-intel" / "ingestion"))
+sys.path.insert(0, str(settings.project_root))
+sys.path.insert(0, str(settings.project_root / "ingestion"))
 
 
 @celery_app.task(bind=True)

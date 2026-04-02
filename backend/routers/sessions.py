@@ -10,8 +10,8 @@ from backend.models.requests import (
 from backend.models.responses import SessionResponse, SOBJResponse
 
 # Add mk-intel to path
-sys.path.insert(0, str(settings.project_root / "mk-intel"))
-sys.path.insert(0, str(settings.project_root / "mk-intel" / "ingestion"))
+sys.path.insert(0, str(settings.project_root))
+sys.path.insert(0, str(settings.project_root / "ingestion"))
 
 from mk_intel_session import (
     MKSession, SessionStatus, CompanyProfile,
