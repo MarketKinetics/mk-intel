@@ -5,7 +5,6 @@ from backend.config import settings
 
 router = APIRouter(prefix="/examples", tags=["examples"])
 
-# Pre-generated example sessions — slug: display metadata
 EXAMPLES = {
     "globalcart": {
         "slug":        "globalcart",
@@ -56,24 +55,23 @@ def get_example(slug: str):
         raise HTTPException(status_code=404, detail="Example not found")
     enriched_dir = _get_example_dir(slug) / "enriched"
 
-    # Load rankings
     rankings = {}
     rankings_path = enriched_dir / "scored_rankings.json"
     if rankings_path.exists():
         rankings = json.loads(rankings_path.read_text())
 
-    # List TARs
     tars = []
     tars_dir = enriched_dir / "tars"
     if tars_dir.exists():
         for f in sorted(tars_dir.glob("*.json")):
             data = json.loads(f.read_text())
             tars.append({
-                "tar_id":      data.get("tar_id"),
-                "ta_id":       data.get("ta_id"),
-                "sobj_id":     data.get("sobj_id"),
-                "gate_passed": data.get("gate_passed"),
-                "confidence":  data.get("confidence_case"),
+                "tar_id":       data.get("tar_id"),
+                "ta_id":        data.get("ta_id"),
+                "sobj_id":      data.get("sobj_id"),
+                "gate_passed":  data.get("gate_passed"),
+                "confidence":   data.get("confidence_case"),
+                "audience_name": data.get("audience_name"),
             })
 
     return {
@@ -95,14 +93,12 @@ def get_example_tar(slug: str, tar_id: str):
 
 @router.get("/{slug}/tars/{tar_id}/summary")
 def get_example_tar_summary(slug: str, tar_id: str):
-    """Get executive summary for an example TAR."""
-    from backend.routers.pipeline import get_tar_summary
-    # Reuse the summary logic by temporarily mapping to session
+    """Get executive summary for an example TAR — generates and persists audience_name."""
     meta = EXAMPLES.get(slug)
     if not meta:
         raise HTTPException(status_code=404, detail="Example not found")
 
-    import json, os
+    import os
     from dotenv import load_dotenv
     load_dotenv()
 
@@ -113,7 +109,6 @@ def get_example_tar_summary(slug: str, tar_id: str):
 
     tar = json.loads(tar_path.read_text())
 
-    # Call summary generation directly
     import anthropic
     from backend.routers.pipeline import _build_summary_prompt
     prompt = _build_summary_prompt(tar)
@@ -129,16 +124,26 @@ def get_example_tar_summary(slug: str, tar_id: str):
     except json.JSONDecodeError:
         summary = {"raw": raw, "parse_error": True}
 
-    return {"tar_id": tar_id, "ta_id": tar.get("ta_id"),
-            "sobj_id": tar.get("sobj_id"), "summary": summary}
+    # Persist audience_name back to TAR JSON
+    if not summary.get("parse_error") and summary.get("audience_name"):
+        try:
+            tar["audience_name"] = summary["audience_name"]
+            tar_path.write_text(json.dumps(tar, indent=2, default=str))
+        except Exception:
+            pass
+
+    return {
+        "tar_id":  tar_id,
+        "ta_id":   tar.get("ta_id"),
+        "sobj_id": tar.get("sobj_id"),
+        "summary": summary,
+    }
 
 
 @router.get("/{slug}/tars/{tar_id}/summary.html")
 def get_example_tar_summary_html(slug: str, tar_id: str):
     """Get formatted HTML executive summary for an example TAR."""
     from fastapi.responses import HTMLResponse
-    from backend.routers.pipeline import get_tar_summary_html
-    # Build a minimal shim — reuse HTML generation
     summary_data = get_example_tar_summary(slug, tar_id)
     from backend.routers.pipeline import _render_summary_html
     return HTMLResponse(content=_render_summary_html(

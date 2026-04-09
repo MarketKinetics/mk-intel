@@ -398,6 +398,14 @@ Return ONLY the JSON object."""
     except json.JSONDecodeError:
         summary = {"raw": raw, "parse_error": True}
 
+    # Persist audience_name back to TAR JSON if generated
+    if not summary.get("parse_error") and summary.get("audience_name"):
+        try:
+            tar["audience_name"] = summary["audience_name"]
+            tar_path.write_text(json.dumps(tar, indent=2, default=str))
+        except Exception:
+            pass
+
     return {
         "tar_id":   tar_id,
         "ta_id":    tar.get("ta_id"),
