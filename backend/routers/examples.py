@@ -15,7 +15,7 @@ EXAMPLES = {
         "ta_count":    7,
         "tar_count":   4,
         "zip_enrichment": False,
-        "session_slug": "globalcart_demo_20e909ae",
+        "session_slug": "globalcart_afd8c333",
     },
     "cloudsync": {
         "slug":        "cloudsync",
