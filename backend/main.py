@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from backend.config import settings
 from backend.celery_app import celery_app
 from backend.db.jobs import init_db
@@ -9,6 +10,14 @@ from backend.routers.examples import router as examples_router
 import redis
 
 app = FastAPI(title=settings.app_name, version=settings.app_version)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.include_router(sessions.router)
 app.include_router(pipeline.router)
 app.include_router(demo_router)
