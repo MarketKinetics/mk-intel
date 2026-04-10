@@ -15,7 +15,7 @@ EXAMPLES = {
         "ta_count":    7,
         "tar_count":   4,
         "zip_enrichment": False,
-        "session_slug": "globalcart_afd8c333",
+        "session_slug": "afd8c333",
     },
     "cloudsync": {
         "slug":        "cloudsync",
@@ -35,10 +35,18 @@ def _get_example_dir(slug: str) -> Path:
     meta = EXAMPLES.get(slug)
     if not meta:
         raise HTTPException(status_code=404, detail="Example not found")
-    path = settings.project_root / "data" / "company_data" / meta["session_slug"]
-    if not path.exists():
-        raise HTTPException(status_code=404, detail=f"Example data not found on disk: {meta['session_slug']}")
-    return path
+    # Try direct slug first, then search by session_id prefix
+    direct = settings.project_root / "data" / "company_data" / meta["session_slug"]
+    if direct.exists():
+        return direct
+    # Search for directory containing the session_id prefix
+    session_id = meta["session_slug"]
+    base = settings.project_root / "data" / "company_data"
+    if base.exists():
+        for d in base.iterdir():
+            if d.is_dir() and session_id in d.name:
+                return d
+    raise HTTPException(status_code=404, detail=f"Example data not found on disk: {meta['session_slug']}")
 
 
 @router.get("")
