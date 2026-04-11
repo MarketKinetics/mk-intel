@@ -26,7 +26,7 @@ EXAMPLES = {
         "ta_count":    6,
         "tar_count":   4,
         "zip_enrichment": True,
-        "session_slug": "cloudsync_demo_94e9a435",
+        "session_slug": "fcb77ed8",
     },
 }
 
