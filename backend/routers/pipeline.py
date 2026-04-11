@@ -144,23 +144,26 @@ def generate(session_id: str, request: Request):
     )
     if not (enriched_dir / "tar_candidates.json").exists():
         raise HTTPException(status_code=400, detail="Run prefilter first")
-
-    # Demo quota check
+    # BYOK — if user provides their own key, skip quota entirely
+    byok_key = request.headers.get("X-Anthropic-Key")
+    # Demo quota check — only if no BYOK key
     demo_token = request.headers.get("X-Demo-Token")
-    if demo_token:
+    if not byok_key and demo_token:
         from backend.db.demo import check_quota
         allowed, reason = check_quota(demo_token)
         if not allowed:
             raise HTTPException(status_code=402, detail=f"{reason}. To continue, use your own Anthropic API key.")
-
     job_id = create_job(session_id, "generate")
     from backend.tasks.pipeline import run_tar_generation
     task = run_tar_generation.delay(
         session_id=session_id,
         job_id=job_id,
-        demo_token=demo_token,
+        demo_token=demo_token if not byok_key else None,
+        byok_key=byok_key,
     )
     from backend.db.jobs import update_job
+    update_job(job_id, celery_task_id=task.id)
+    return {"job_id": job_id, "status": "pending"}
     update_job(job_id, celery_task_id=task.id)
     return {"job_id": job_id, "status": "pending"}
 

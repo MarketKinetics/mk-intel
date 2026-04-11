@@ -107,7 +107,7 @@ def run_prefilter(self, session_id: str, job_id: str):
 
 
 @celery_app.task(bind=True)
-def run_tar_generation(self, session_id: str, job_id: str, demo_token: str = None):
+def run_tar_generation(self, session_id: str, job_id: str, demo_token: str = None, byok_key: str = None):
     """Run TAR generation and scoring pipeline."""
     import json
     from pathlib import Path
@@ -150,6 +150,10 @@ def run_tar_generation(self, session_id: str, job_id: str, demo_token: str = Non
         candidates = [CandidateProxy(c) for c in candidates_raw]
 
         update_job(job_id, progress=f"Generating {len(candidates)} TARs...")
+        # Set BYOK key on session if provided
+        if byok_key:
+            session.api_key = byok_key
+            session.session_mode = "byok"
         generator = MKTARGenerator(
             session         = session,
             compliance_mode = "standard",
