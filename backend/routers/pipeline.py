@@ -189,6 +189,7 @@ def list_tars(session_id: str):
             "sobj_id":       data.get("sobj_id"),
             "gate_passed":   data.get("gate_passed"),
             "confidence":    data.get("confidence_case"),
+            "audience_name": data.get("audience_name"),
         })
     return tars
 
