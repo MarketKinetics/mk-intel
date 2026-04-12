@@ -242,8 +242,9 @@ class RefinedTAProfile:
 
         # Merge: locked fields take precedence over refined fields
         self.profile = {**source_ta_card, **refined_fields, **locked_fields}
-        self.profile["refinement_case"]    = refinement_case
-        self.profile["refinement_context"] = company_context
+        self.profile["refinement_case"]       = refinement_case
+        self.profile["refinement_context"]    = company_context
+        self.profile["company_specific_name"] = refined_fields.get("company_specific_name", "")
 
     def to_dict(self) -> dict:
         return {
@@ -404,12 +405,13 @@ class MKTARGenerator:
             print(f"[tar_generator]   {ta_id} → Case {case}")
 
             if case == "C":
-                # Already LLM-generated — skip refinement, pass through
+                # Already LLM-generated — skip profile refinement but generate company-specific name
+                case_c_name = self._generate_name_for_case_c(card, company_context)
                 rp = RefinedTAProfile(
                     ta_id           = ta_id,
                     source_ta_card  = card,
                     refinement_case = "C",
-                    refined_fields  = {},
+                    refined_fields  = {"company_specific_name": case_c_name},
                     locked_fields   = {},
                     company_context = company_context,
                     compliance_mode = self.compliance_mode,
@@ -628,6 +630,7 @@ Current profile:
 
 Return a JSON object with these refined fields:
 {{
+    "company_specific_name": "3-6 word name describing this audience segment's behavioral role in the context of this specific company and campaign objective. Must be professional, specific, and action-oriented. Reflect what this audience DOES relative to the business goal — not just who they are demographically. Examples: 'Mobile-First Value-Conscious Renewers', 'High-LTV Passive Churn Risk', 'Budget-Sensitive Upgrade Candidates'.",
     "psych_summary": "...",
     "media_summary": "...",
     "channel_implications": "...",
@@ -655,6 +658,7 @@ Current profile:
 
 Return a JSON object adjusting ONLY income-related content:
 {{
+    "company_specific_name": "3-6 word name describing this audience segment's behavioral role in the context of this specific company and campaign objective. Must be professional, specific, and action-oriented. Reflect what this audience DOES relative to the business goal. Examples: 'Price-Sensitive Mid-Tenure Renewers', 'Income-Constrained Upgrade Candidates'.",
     "psych_summary": "...",
     "motivational_drivers": ["...", "..."],
     "key_barriers": ["...", "..."],
@@ -687,6 +691,7 @@ Current profile:
 
 Return a JSON object adjusting ONLY cultural/media/psych content:
 {{
+    "company_specific_name": "3-6 word name describing this audience segment's behavioral role in the context of this specific company and campaign objective. Must be professional, specific, and action-oriented. Reflect what this audience DOES relative to the business goal. Examples: 'Culturally-Distinct Retention Risk', 'Community-Driven Renewal Segment'.",
     "psych_summary": "...",
     "media_summary": "...",
     "channel_implications": "...",
@@ -741,6 +746,59 @@ Return ONLY the JSON object."""
             compliance_mode = self.compliance_mode,
             created_at      = datetime.now(timezone.utc).isoformat(),
         )
+
+
+    def _generate_name_for_case_c(self, card: dict, company_context: str) -> str:
+        """
+        Generate a company-specific audience name for Case C profiles.
+        Case C skips full refinement so we make a dedicated small LLM call
+        just for the name.
+        """
+        try:
+            from utils import get_client, log_api_usage
+        except ImportError:
+            from mk_intel.ingestion.utils import get_client, log_api_usage
+
+        archetype = card.get("archetype_name", "Unknown")
+        behavioral = {
+            k: v for k, v in card.get("behavioral_signals", {}).items()
+            if v is not None and not any(excl in k for excl in self._excluded_signals)
+        }
+
+        prompt = f"""Given this audience profile and company context, generate a short 3-6 word name
+that describes this audience segment's behavioral role for this specific company and campaign.
+The name must be professional, specific, and action-oriented.
+Reflect what this audience DOES relative to the business goal — not just who they are demographically.
+Examples: "Mobile-First Value-Conscious Renewers", "High-LTV Passive Churn Risk", "Budget-Sensitive Upgrade Candidates"
+
+Archetype base: {archetype}
+Behavioral signals: {json.dumps({k: v for k, v in list(behavioral.items())[:10]}, indent=2)}
+Company context: {company_context[:400]}
+
+Return ONLY a JSON object:
+{{
+    "company_specific_name": "3-6 word audience name here"
+}}"""
+
+        try:
+            client   = get_client(self.session)
+            response = client.messages.create(
+                model      = "claude-haiku-4-5-20251001",
+                max_tokens = 100,
+                messages   = [{"role": "user", "content": prompt}],
+            )
+            log_api_usage(response, "case_c_name_generation", self.session)
+            raw = response.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+            result = json.loads(raw)
+            name = result.get("company_specific_name", "").strip()
+            if name:
+                print(f"[tar_generator]   Case C name generated: {name}")
+                return name
+        except Exception as e:
+            print(f"[tar_generator] ⚠ Case C name generation failed: {e}")
+
+        # Fallback to archetype name
+        return archetype
 
 
     def _match_sobj_to_rules(

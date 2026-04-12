@@ -161,6 +161,7 @@ def get_example_tar_summary_html(slug: str, tar_id: str):
         summary_data["sobj_id"],
     ))
 
+
 @router.get("/{slug}/tars/export/{sobj_id}")
 def export_example_tars_html(slug: str, sobj_id: str):
     """Export all TARs for a given SOBJ as a single print-ready HTML file."""
@@ -176,6 +177,14 @@ def export_example_tars_html(slug: str, sobj_id: str):
     if not tars_dir.exists():
         raise HTTPException(status_code=404, detail="No TARs found")
 
+    # Load rankings for sort order
+    rankings = {}
+    rankings_path = enriched_dir / "scored_rankings.json"
+    if rankings_path.exists():
+        raw_rankings = json.loads(rankings_path.read_text())
+        for r in raw_rankings.get(sobj_id, []):
+            rankings[r["tar_id"]] = r.get("rank", 999)
+
     tars = []
     for f in sorted(tars_dir.glob("*.json")):
         data = json.loads(f.read_text())
@@ -184,6 +193,9 @@ def export_example_tars_html(slug: str, sobj_id: str):
 
     if not tars:
         raise HTTPException(status_code=404, detail=f"No TARs found for {sobj_id}")
+
+    # Sort by rank
+    tars.sort(key=lambda t: rankings.get(t.get("ta_id", ""), 999))
 
     html = _render_export_html(tars, meta["name"], sobj_id)
     return HTMLResponse(content=html, headers={

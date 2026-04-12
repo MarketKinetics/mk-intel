@@ -11,256 +11,6 @@ sys.path.insert(0, str(settings.project_root / "ingestion"))
 
 from mk_intel_session import MKSession
 
-
-
-def _safe(val):
-    """Safe string extractor for TAR fields."""
-    if val is None:
-        return ""
-    if isinstance(val, str):
-        return val
-    if isinstance(val, (int, float, bool)):
-        return str(val)
-    if isinstance(val, list):
-        return ", ".join(_safe(v) for v in val if v)
-    if isinstance(val, dict):
-        for key in ["statement", "description", "premise", "consequence",
-                    "assessment", "reason", "text", "content", "value",
-                    "action", "name"]:
-            if val.get(key):
-                return str(val[key])
-    return ""
-
-
-def _render_export_html(tars: list, company_name: str, sobj_id: str) -> str:
-    """Render all TARs for a SOBJ as a single print-ready HTML."""
-
-    CONF_LABELS = {
-        "A":  "Full census alignment — high confidence",
-        "B1": "Income divergence — income descriptors adjusted",
-        "B2": "Race divergence — cultural layer adjusted",
-        "C":  "Full conflict — custom archetype, confidence penalty applied",
-    }
-
-    css = """
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-       background: #f5f5f5; color: #1a1a1a; padding: 32px 16px; }
-.cover { max-width: 860px; margin: 0 auto 48px; background: #0a1628;
-         border-radius: 12px; padding: 48px; color: white; }
-.cover .label { font-size: 11px; text-transform: uppercase; letter-spacing: 2px;
-                color: #14c9b8; margin-bottom: 12px; }
-.cover h1 { font-size: 28px; font-weight: 600; margin-bottom: 8px; }
-.cover .sub { font-size: 14px; color: rgba(255,255,255,0.45); }
-.tar-card { max-width: 860px; margin: 0 auto 48px; background: white;
-            border-radius: 12px; box-shadow: 0 2px 16px rgba(0,0,0,0.08);
-            overflow: hidden; page-break-after: always; }
-.tar-header { background: #0d1f3c; color: white; padding: 32px; }
-.tar-header .rank { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px;
-                    color: #14c9b8; margin-bottom: 8px; }
-.tar-header h2 { font-size: 22px; font-weight: 600; margin-bottom: 6px; }
-.tar-header .sobj { font-size: 13px; color: rgba(255,255,255,0.45); }
-.verdict-bar { padding: 14px 32px; font-size: 13px; font-weight: 600; }
-.verdict-first  { background: #e6f4ea; color: #1e7e34; border-left: 4px solid #28a745; }
-.verdict-high   { background: #e8f0fe; color: #1a56db; border-left: 4px solid #1a56db; }
-.verdict-medium { background: #fff8e1; color: #b45309; border-left: 4px solid #f59e0b; }
-.verdict-lower  { background: #fdf2f2; color: #b91c1c; border-left: 4px solid #ef4444; }
-.tar-body { padding: 32px; }
-.meta-row { display: flex; gap: 16px; margin-bottom: 28px;
-            padding: 16px; background: #f8f9fa; border-radius: 8px; flex-wrap: wrap; }
-.meta-item { flex: 1; min-width: 120px; }
-.meta-item .label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
-                    color: #888; margin-bottom: 4px; }
-.meta-item .value { font-size: 14px; font-weight: 600; color: #1a1a1a; }
-.section { margin-bottom: 28px; }
-.section-title { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px;
-                 color: #888; margin-bottom: 10px; font-weight: 600; }
-.section p, .section li { font-size: 14px; line-height: 1.6; color: #333; }
-.section ul { padding-left: 18px; }
-.section li { margin-bottom: 6px; }
-.action { display: flex; gap: 14px; margin-bottom: 10px;
-          padding: 12px; background: #f8f9fa; border-radius: 8px; align-items: flex-start; }
-.action-num { background: #0d1f3c; color: white; width: 24px; height: 24px;
-              border-radius: 50%; display: flex; align-items: center; justify-content: center;
-              font-size: 11px; font-weight: 600; flex-shrink: 0; margin-top: 2px; }
-.action-body { flex: 1; }
-.action-desc { font-size: 13px; line-height: 1.5; color: #333; margin-bottom: 5px; }
-.tag { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 10px;
-       background: #e8f0fe; color: #1a56db; font-weight: 500; margin-right: 4px; }
-.divider { border: none; border-top: 1px solid #eee; margin: 24px 0; }
-.risk-box { background: #fff8e1; border-left: 4px solid #f59e0b;
-            padding: 12px 16px; border-radius: 0 8px 8px 0; }
-.footer { padding: 14px 32px; background: #f8f9fa;
-          font-size: 11px; color: #aaa; border-top: 1px solid #eee; }
-@media print {
-  body { background: white; padding: 0; }
-  .tar-card { box-shadow: none; border-radius: 0; margin-bottom: 0; }
-  .cover { border-radius: 0; }
-}
-"""
-
-    sobj_statement = tars[0].get("sobj_statement", sobj_id) if tars else sobj_id
-
-    cards_html = ""
-    for tar in tars:
-        audience_name = tar.get("audience_name") or _safe(tar.get("header", {}).get("target_audience", {}).get("definition", "")) or tar.get("ta_id", "")
-        tar_id = tar.get("tar_id", "")
-        ta_id = tar.get("ta_id", "")
-        confidence = tar.get("confidence_case", "")
-        conf_label = CONF_LABELS.get(confidence, confidence)
-
-        # Effectiveness
-        eff = tar.get("effectiveness", {})
-        eff_rating = _safe(eff.get("rating"))
-        desired_behavior = _safe(eff.get("desired_behavior", {}).get("statement", ""))
-        sobj_impact = _safe(eff.get("sobj_impact", {}).get("description", ""))
-        rating_rationale = _safe(eff.get("rating_rationale", ""))
-
-        # Vulnerabilities — motives
-        vulns = tar.get("vulnerabilities", {})
-        motives = vulns.get("motives", [])
-        motives_html = "".join(f"<li><strong>{_safe(m.get('description',''))}</strong> — {_safe(m.get('behavioral_link',''))}</li>" for m in motives[:4])
-
-        # Susceptibility
-        susc = tar.get("susceptibility", {})
-        susc_rating = _safe(susc.get("rating"))
-        recommended_approach = susc.get("recommended_approach", {})
-        approach_note = _safe(recommended_approach.get("sequencing_note", ""))
-
-        # Accessibility — top channels
-        channels = tar.get("accessibility", [])
-        top_channels = [c for c in channels if c.get("reach_quality", 0) >= 3 and not c.get("violates_restrictions")][:3]
-        channels_html = "".join(f"<li><strong>{c.get('channel_name','')}</strong> — {_safe(c.get('constraints','') or c.get('rating_rationale',''))}</li>" for c in top_channels)
-
-        # Narrative & actions
-        narrative = tar.get("narrative_and_actions", {})
-        main_arg = narrative.get("main_argument", {})
-        premise = _safe(main_arg.get("premise", ""))
-        consequence = _safe(main_arg.get("consequence", ""))
-        actions = narrative.get("recommended_actions", [])
-        actions_html = ""
-        for i, a in enumerate(actions, 1):
-            desc = _safe(a.get("description", ""))
-            channel = _safe(a.get("channel", ""))
-            actions_html += f"""<div class="action">
-              <div class="action-num">{i}</div>
-              <div class="action-body">
-                <div class="action-desc">{desc}</div>
-                <span class="tag">{channel}</span>
-              </div>
-            </div>"""
-
-        # Assessment
-        assessment = tar.get("assessment", {})
-        target_behavior = _safe(assessment.get("target_behavior", ""))
-        refined_q = _safe(assessment.get("refined_assessment_question", ""))
-
-        cards_html += f"""
-<div class="tar-card">
-  <div class="tar-header">
-    <div class="rank">Target Audience Report &middot; {tar_id}</div>
-    <h2>{audience_name}</h2>
-    <div class="sobj">{sobj_statement}</div>
-  </div>
-  <div class="tar-body">
-    <div class="meta-row">
-      <div class="meta-item">
-        <div class="label">Audience ID</div>
-        <div class="value">{ta_id}</div>
-      </div>
-      <div class="meta-item">
-        <div class="label">Effectiveness</div>
-        <div class="value">{eff_rating}/5</div>
-      </div>
-      <div class="meta-item">
-        <div class="label">Susceptibility</div>
-        <div class="value">{susc_rating}/5</div>
-      </div>
-      <div class="meta-item">
-        <div class="label">Confidence</div>
-        <div class="value">{conf_label}</div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">Desired behavior</div>
-      <p>{desired_behavior}</p>
-    </div>
-
-    <div class="section">
-      <div class="section-title">Campaign impact</div>
-      <p>{sobj_impact}</p>
-    </div>
-
-    <div class="section">
-      <div class="section-title">Effectiveness rationale</div>
-      <p>{rating_rationale}</p>
-    </div>
-
-    <hr class="divider">
-
-    <div class="section">
-      <div class="section-title">Key motivational vulnerabilities</div>
-      <ul>{motives_html}</ul>
-    </div>
-
-    <div class="section">
-      <div class="section-title">Persuasion logic</div>
-      <p><strong>If</strong> {premise}</p>
-      <p style="margin-top:8px"><strong>Then</strong> {consequence}</p>
-    </div>
-
-    <div class="section">
-      <div class="section-title">Recommended approach</div>
-      <p>{approach_note}</p>
-    </div>
-
-    <hr class="divider">
-
-    <div class="section">
-      <div class="section-title">Recommended actions</div>
-      {actions_html}
-    </div>
-
-    <hr class="divider">
-
-    <div class="section">
-      <div class="section-title">Top channels</div>
-      <ul>{channels_html}</ul>
-    </div>
-
-    <div class="section">
-      <div class="section-title">Target behavior</div>
-      <p>{target_behavior}</p>
-    </div>
-
-    <div class="section">
-      <div class="section-title">Assessment question</div>
-      <p>{refined_q}</p>
-    </div>
-  </div>
-  <div class="footer">MK Intel &middot; {tar_id} &middot; Draft &middot; Media and budget agnostic. Full channel strategy in MK Campaign.</div>
-</div>"""
-
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MK Intel Export — {company_name} &middot; {sobj_id}</title>
-<style>{css}</style>
-</head>
-<body>
-<div class="cover">
-  <div class="label">MK Intel &middot; Target Audience Reports</div>
-  <h1>{company_name}</h1>
-  <div class="sub">{sobj_id} &middot; {sobj_statement} &middot; {len(tars)} audience report{"s" if len(tars) != 1 else ""} &middot; Draft</div>
-</div>
-{cards_html}
-</body>
-</html>"""
-
-
 router = APIRouter(prefix="/sessions", tags=["pipeline"])
 
 SESSIONS_DIR = settings.project_root / "data" / "sessions"
@@ -819,6 +569,239 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     return HTMLResponse(content=html)
 
 
+def _safe(val):
+    """Safe string extractor for TAR fields."""
+    if val is None:
+        return ""
+    if isinstance(val, str):
+        return val
+    if isinstance(val, (int, float, bool)):
+        return str(val)
+    if isinstance(val, list):
+        return ", ".join(_safe(v) for v in val if v)
+    if isinstance(val, dict):
+        for key in ["statement", "description", "premise", "consequence",
+                    "assessment", "reason", "text", "content", "value",
+                    "action", "name"]:
+            if val.get(key):
+                return str(val[key])
+    return ""
+
+
+def _render_export_html(tars: list, company_name: str, sobj_id: str) -> str:
+    """Render all TARs for a SOBJ as a single print-ready HTML."""
+
+    CONF_LABELS = {
+        "A":  "Full census alignment — high confidence",
+        "B1": "Income divergence — income descriptors adjusted",
+        "B2": "Race divergence — cultural layer adjusted",
+        "C":  "Full conflict — custom archetype, confidence penalty applied",
+    }
+
+    css = """
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+       background: #f5f5f5; color: #1a1a1a; padding: 32px 16px; }
+.cover { max-width: 860px; margin: 0 auto 48px; background: #0a1628;
+         border-radius: 12px; padding: 48px; color: white; }
+.cover .label { font-size: 11px; text-transform: uppercase; letter-spacing: 2px;
+                color: #14c9b8; margin-bottom: 12px; }
+.cover h1 { font-size: 28px; font-weight: 600; margin-bottom: 8px; }
+.cover .sub { font-size: 14px; color: rgba(255,255,255,0.45); }
+.tar-card { max-width: 860px; margin: 0 auto 48px; background: white;
+            border-radius: 12px; box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+            overflow: hidden; page-break-after: always; }
+.tar-header { background: #0d1f3c; color: white; padding: 32px; }
+.tar-header .rank { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px;
+                    color: #14c9b8; margin-bottom: 8px; }
+.tar-header h2 { font-size: 22px; font-weight: 600; margin-bottom: 6px; }
+.tar-header .sobj { font-size: 13px; color: rgba(255,255,255,0.45); }
+.tar-body { padding: 32px; }
+.meta-row { display: flex; gap: 16px; margin-bottom: 28px;
+            padding: 16px; background: #f8f9fa; border-radius: 8px; flex-wrap: wrap; }
+.meta-item { flex: 1; min-width: 120px; }
+.meta-item .label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+                    color: #888; margin-bottom: 4px; }
+.meta-item .value { font-size: 14px; font-weight: 600; color: #1a1a1a; }
+.section { margin-bottom: 28px; }
+.section-title { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px;
+                 color: #888; margin-bottom: 10px; font-weight: 600; }
+.section p, .section li { font-size: 14px; line-height: 1.6; color: #333; }
+.section ul { padding-left: 18px; }
+.section li { margin-bottom: 6px; }
+.action { display: flex; gap: 14px; margin-bottom: 10px;
+          padding: 12px; background: #f8f9fa; border-radius: 8px; align-items: flex-start; }
+.action-num { background: #0d1f3c; color: white; width: 24px; height: 24px;
+              border-radius: 50%; display: flex; align-items: center; justify-content: center;
+              font-size: 11px; font-weight: 600; flex-shrink: 0; margin-top: 2px; }
+.action-body { flex: 1; }
+.action-desc { font-size: 13px; line-height: 1.5; color: #333; margin-bottom: 5px; }
+.tag { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 10px;
+       background: #e8f0fe; color: #1a56db; font-weight: 500; margin-right: 4px; }
+.divider { border: none; border-top: 1px solid #eee; margin: 24px 0; }
+.risk-box { background: #fff8e1; border-left: 4px solid #f59e0b;
+            padding: 12px 16px; border-radius: 0 8px 8px 0; }
+.footer { padding: 14px 32px; background: #f8f9fa;
+          font-size: 11px; color: #aaa; border-top: 1px solid #eee; }
+@media print {
+  body { background: white; padding: 0; }
+  .tar-card { box-shadow: none; border-radius: 0; margin-bottom: 0; }
+  .cover { border-radius: 0; }
+}
+"""
+
+    sobj_statement = tars[0].get("sobj_statement", sobj_id) if tars else sobj_id
+
+    cards_html = ""
+    for i, tar in enumerate(tars, 1):
+        audience_name = (
+            tar.get("audience_name") or
+            _safe(tar.get("header", {}).get("target_audience", {}).get("definition", "")) or
+            tar.get("ta_id", "")
+        )
+        tar_id     = tar.get("tar_id", "")
+        ta_id      = tar.get("ta_id", "")
+        confidence = tar.get("confidence_case", "")
+        conf_label = CONF_LABELS.get(confidence, confidence)
+
+        eff            = tar.get("effectiveness", {})
+        eff_rating     = _safe(eff.get("rating"))
+        desired_behavior = _safe(eff.get("desired_behavior", {}).get("statement", ""))
+        sobj_impact    = _safe(eff.get("sobj_impact", {}).get("description", ""))
+        rating_rationale = _safe(eff.get("rating_rationale", ""))
+
+        vulns   = tar.get("vulnerabilities", {})
+        motives = vulns.get("motives", [])
+        motives_html = "".join(
+            f"<li><strong>{_safe(m.get('description',''))}</strong> — {_safe(m.get('behavioral_link',''))}</li>"
+            for m in motives[:4]
+        )
+
+        susc    = tar.get("susceptibility", {})
+        susc_rating = _safe(susc.get("rating"))
+        recommended_approach = susc.get("recommended_approach", {})
+        approach_note = _safe(recommended_approach.get("sequencing_note", ""))
+
+        channels     = tar.get("accessibility", [])
+        top_channels = [c for c in channels if c.get("reach_quality", 0) >= 3 and not c.get("violates_restrictions")][:3]
+        channels_html = "".join(
+            f"<li><strong>{c.get('channel_name','')}</strong> — {_safe(c.get('constraints','') or c.get('rating_rationale',''))}</li>"
+            for c in top_channels
+        )
+
+        narrative    = tar.get("narrative_and_actions", {})
+        main_arg     = narrative.get("main_argument", {})
+        premise      = _safe(main_arg.get("premise", ""))
+        consequence  = _safe(main_arg.get("consequence", ""))
+        actions      = narrative.get("recommended_actions", [])
+        actions_html = ""
+        for j, a in enumerate(actions, 1):
+            desc    = _safe(a.get("description", ""))
+            channel = _safe(a.get("channel", ""))
+            actions_html += f"""<div class="action">
+              <div class="action-num">{j}</div>
+              <div class="action-body">
+                <div class="action-desc">{desc}</div>
+                <span class="tag">{channel}</span>
+              </div>
+            </div>"""
+
+        assessment    = tar.get("assessment", {})
+        target_behavior = _safe(assessment.get("target_behavior", ""))
+        refined_q     = _safe(assessment.get("refined_assessment_question", ""))
+
+        cards_html += f"""
+<div class="tar-card">
+  <div class="tar-header">
+    <div class="rank">#{i} Priority &middot; {tar_id}</div>
+    <h2>{audience_name}</h2>
+    <div class="sobj">{sobj_statement}</div>
+  </div>
+  <div class="tar-body">
+    <div class="meta-row">
+      <div class="meta-item">
+        <div class="label">Audience ID</div>
+        <div class="value">{ta_id}</div>
+      </div>
+      <div class="meta-item">
+        <div class="label">Effectiveness</div>
+        <div class="value">{eff_rating}/5</div>
+      </div>
+      <div class="meta-item">
+        <div class="label">Susceptibility</div>
+        <div class="value">{susc_rating}/5</div>
+      </div>
+      <div class="meta-item">
+        <div class="label">Confidence</div>
+        <div class="value">{conf_label}</div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">Desired behavior</div>
+      <p>{desired_behavior}</p>
+    </div>
+    <div class="section">
+      <div class="section-title">Campaign impact</div>
+      <p>{sobj_impact}</p>
+    </div>
+    <div class="section">
+      <div class="section-title">Effectiveness rationale</div>
+      <p>{rating_rationale}</p>
+    </div>
+    <hr class="divider">
+    <div class="section">
+      <div class="section-title">Key motivational vulnerabilities</div>
+      <ul>{motives_html}</ul>
+    </div>
+    <div class="section">
+      <div class="section-title">Persuasion logic</div>
+      <p><strong>If</strong> {premise}</p>
+      <p style="margin-top:8px"><strong>Then</strong> {consequence}</p>
+    </div>
+    <div class="section">
+      <div class="section-title">Recommended approach</div>
+      <p>{approach_note}</p>
+    </div>
+    <hr class="divider">
+    <div class="section">
+      <div class="section-title">Recommended actions</div>
+      {actions_html}
+    </div>
+    <hr class="divider">
+    <div class="section">
+      <div class="section-title">Top channels</div>
+      <ul>{channels_html}</ul>
+    </div>
+    <div class="section">
+      <div class="section-title">Target behavior</div>
+      <p>{target_behavior}</p>
+    </div>
+    <div class="section">
+      <div class="section-title">Assessment question</div>
+      <p>{refined_q}</p>
+    </div>
+  </div>
+  <div class="footer">MK Intel &middot; {tar_id} &middot; Draft &middot; Media and budget agnostic. Full channel strategy in MK Campaign.</div>
+</div>"""
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MK Intel Export — {company_name} &middot; {sobj_id}</title>
+<style>{css}</style>
+</head>
+<body>
+<div class="cover">
+  <div class="label">MK Intel &middot; Target Audience Reports</div>
+  <h1>{company_name}</h1>
+  <div class="sub">{sobj_id} &middot; {sobj_statement} &middot; {len(tars)} audience report{"s" if len(tars) != 1 else ""} &middot; Draft</div>
+</div>
+{cards_html}
+</body>
+</html>"""
+
 
 @router.get("/{session_id}/tars/export/{sobj_id}")
 def export_tars_html(session_id: str, sobj_id: str):
@@ -829,12 +812,21 @@ def export_tars_html(session_id: str, sobj_id: str):
     session = _load_session(session_id)
     company_name = session.company.name if session.company else "unknown"
     slug = company_name.lower().replace(" ", "_")
-    tars_dir = (
+    enriched_dir = (
         settings.project_root / "data" / "company_data" /
-        f"{slug}_{session_id[:8]}" / "enriched" / "tars"
+        f"{slug}_{session_id[:8]}" / "enriched"
     )
+    tars_dir = enriched_dir / "tars"
     if not tars_dir.exists():
         raise HTTPException(status_code=404, detail="No TARs found")
+
+    # Load rankings for sort order
+    rankings = {}
+    rankings_path = enriched_dir / "scored_rankings.json"
+    if rankings_path.exists():
+        raw_rankings = json.loads(rankings_path.read_text())
+        for r in raw_rankings.get(sobj_id, []):
+            rankings[r["tar_id"]] = r.get("rank", 999)
 
     tars = []
     for f in sorted(tars_dir.glob("*.json")):
@@ -845,10 +837,14 @@ def export_tars_html(session_id: str, sobj_id: str):
     if not tars:
         raise HTTPException(status_code=404, detail=f"No TARs found for {sobj_id}")
 
+    # Sort by rank
+    tars.sort(key=lambda t: rankings.get(t.get("ta_id", ""), 999))
+
     html = _render_export_html(tars, company_name, sobj_id)
     return HTMLResponse(content=html, headers={
         "Content-Disposition": f"inline; filename=mk-intel-export-{sobj_id}.html"
     })
+
 
 @router.post("/admin/setup-store")
 def setup_segment_store(admin_key: str):

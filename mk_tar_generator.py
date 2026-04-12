@@ -354,11 +354,14 @@ class MKTARGenerator:
 
         return f"""AUDIENCE PROFILE
 ================
-Archetype      : {profile.get('archetype_name', 'Unknown')}
+Audience name  : {profile.get('company_specific_name') or profile.get('archetype_name', 'Unknown')}
+Archetype base : {profile.get('archetype_name', 'Unknown')}
 Source BTA     : {profile.get('source_bta_id', 'Unknown')}
 Cluster        : {profile.get('cluster_id', 'Unknown')}
 Confidence case: {candidate.confidence_case} (A=full alignment, B1=income diverges, B2=race diverges, C=LLM custom)
 BTA confidence : {profile.get('bta_match_confidence', 'unknown')}
+
+IMPORTANT: Refer to this audience throughout the report as "{profile.get('company_specific_name') or profile.get('archetype_name', 'Unknown')}" — do NOT use the archetype base name as the primary audience identifier.
 
 Structural profile:
 {json.dumps(structural, indent=2)}
@@ -410,7 +413,8 @@ Direction  : {candidate.sobj_direction}"""
             },
             "target_audience": {
                 "id":         candidate.ta_id,
-                "definition": profile.get("archetype_name", "Unknown"),
+                "definition": profile.get("company_specific_name") or profile.get("archetype_name", "Unknown"),
+                "bta_definition": profile.get("archetype_name", "Unknown"),
                 "actor_type": "primary",
                 "audience_size_estimate": {
                     "value":      profile.get("cell_size", 0),
@@ -497,8 +501,17 @@ Direction  : {candidate.sobj_direction}"""
 
     def _save_tar(self, doc: TARDocument, output_dir: Path) -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
+        tar_dict = doc.to_dict()
+
+        # Persist company_specific_name as audience_name so app, export,
+        # and TAR body all reference the same consistent name.
+        profile = doc.sections.get("header", {}).get("target_audience", {})
+        company_specific_name = profile.get("definition", "")
+        if company_specific_name:
+            tar_dict["audience_name"] = company_specific_name
+
         with open(output_dir / f"{doc.tar_id}.json", "w") as f:
-            json.dump(doc.to_dict(), f, indent=2, default=str)
+            json.dump(tar_dict, f, indent=2, default=str)
 
 
     # ── Section prompts ───────────────────────────────────────────────────────
