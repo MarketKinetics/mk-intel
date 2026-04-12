@@ -144,6 +144,114 @@ def update_sobj(session_id: str, sobj_id: str, body: SOBJStatusUpdate):
     )
 
 
+@router.get("/{session_id}/column-mapping")
+def get_column_mapping(session_id: str):
+    """Get column mapping with sample values for review."""
+    import json
+    import pandas as pd
+    from backend.config import settings
+
+    session = _load_session(session_id)
+    company_name = session.company.name if session.company else "unknown"
+    slug = company_name.lower().replace(" ", "_")
+    company_dir = (
+        settings.project_root / "data" / "company_data" /
+        f"{slug}_{session_id[:8]}"
+    )
+
+    # Find company dir by session prefix if exact path doesn't exist
+    if not company_dir.exists():
+        base = settings.project_root / "data" / "company_data"
+        for d in base.iterdir():
+            if d.is_dir() and session_id[:8] in d.name:
+                company_dir = d
+                break
+
+    mapping_path = company_dir / "normalized" / "column_mapping.json"
+    if not mapping_path.exists():
+        raise HTTPException(status_code=404, detail="Column mapping not found — run ingestion first")
+
+    mapping_data = json.loads(mapping_path.read_text())
+
+    # Load sample values from raw file
+    samples = {}
+    raw_dir = company_dir / "raw"
+    if raw_dir.exists():
+        raw_files = list(raw_dir.iterdir())
+        if raw_files:
+            try:
+                sys.path.insert(0, str(settings.project_root))
+                sys.path.insert(0, str(settings.project_root / "ingestion"))
+                from readers import read_file
+                df = read_file(raw_files[0])
+                for col in df.columns:
+                    vals = df[col].dropna().head(5).tolist()
+                    samples[col] = [str(v) for v in vals]
+            except Exception as e:
+                print(f"[column-mapping] Could not load samples: {e}")
+
+    # Get canonical fields list from normalizer
+    try:
+        from normalizer import CANONICAL_FIELDS
+        canonical_fields = sorted(list(CANONICAL_FIELDS))
+    except Exception:
+        canonical_fields = []
+
+    return {
+        "session_id":       session_id,
+        "mapping":          mapping_data,
+        "samples":          samples,
+        "canonical_fields": canonical_fields,
+    }
+
+
+@router.patch("/{session_id}/column-mapping")
+def update_column_mapping(session_id: str, body: dict):
+    """Save user-amended column mapping back to disk."""
+    import json
+    from backend.config import settings
+
+    session = _load_session(session_id)
+    company_name = session.company.name if session.company else "unknown"
+    slug = company_name.lower().replace(" ", "_")
+    company_dir = (
+        settings.project_root / "data" / "company_data" /
+        f"{slug}_{session_id[:8]}"
+    )
+
+    if not company_dir.exists():
+        base = settings.project_root / "data" / "company_data"
+        for d in base.iterdir():
+            if d.is_dir() and session_id[:8] in d.name:
+                company_dir = d
+                break
+
+    mapping_path = company_dir / "normalized" / "column_mapping.json"
+    if not mapping_path.exists():
+        raise HTTPException(status_code=404, detail="Column mapping not found")
+
+    # Load existing mapping and apply amendments
+    mapping_data = json.loads(mapping_path.read_text())
+    amendments = body.get("amendments", {})
+
+    for col, canonical_field in amendments.items():
+        if col in mapping_data["mappings"]:
+            if canonical_field is None or canonical_field == "":
+                mapping_data["mappings"][col]["canonical_field"] = None
+                mapping_data["mappings"][col]["method"] = "user_skipped"
+                mapping_data["mappings"][col]["confidence"] = "user"
+            else:
+                mapping_data["mappings"][col]["canonical_field"] = canonical_field
+                mapping_data["mappings"][col]["method"] = "user_amended"
+                mapping_data["mappings"][col]["confidence"] = "user"
+
+    mapping_data["user_amended"] = True
+    mapping_data["amended_at"] = __import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat()
+
+    mapping_path.write_text(json.dumps(mapping_data, indent=2))
+    return {"status": "ok", "amended_fields": list(amendments.keys())}
+
+
 @router.get("/{session_id}/export")
 def export_session(session_id: str):
     """Export all session data as a ZIP file for the session owner."""

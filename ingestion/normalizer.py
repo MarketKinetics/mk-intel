@@ -921,7 +921,15 @@ def _coerce_value(value, expected_type: str, canonical_field: str = ""):
                     cleaned = str(raw / 100.0)
                 else:
                     cleaned = str(raw)
-            return float(cleaned)
+            result = float(cleaned)
+            # Auto-rescale rate fields on 0-100 scale to 0-1.
+            # Handles datasets like IBM Telco where churn_risk_score is 0-100.
+            if canonical_field in RATE_FIELDS and result > 1.0:
+                rescaled = result / 100.0
+                if 0.0 <= rescaled <= 1.0:
+                    print(f"[normalizer] Auto-rescaled {canonical_field}: {result} → {rescaled:.4f} (÷100)")
+                    return rescaled
+            return result
         except (ValueError, TypeError):
             return None
 
