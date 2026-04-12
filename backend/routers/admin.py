@@ -134,6 +134,38 @@ def _build_session_zip(session_id: str) -> io.BytesIO:
                 for f in sorted(tars_dir.glob("*.json")):
                     zf.write(f, f"session_{session_id[:8]}/outputs/tars/{f.name}")
 
+            # Full reports HTML — one file per SOBJ, ranked by score
+            if tars_dir.exists() and rankings.exists():
+                try:
+                    from backend.routers.pipeline import _render_export_html
+                    rankings_data = json.loads(rankings.read_text())
+                    # Build rank lookup: ta_id -> rank
+                    rank_lookup = {}
+                    for sobj_id, sobj_rankings in rankings_data.items():
+                        for r in sobj_rankings:
+                            rank_lookup[r["tar_id"]] = r.get("rank", 999)
+
+                    # Group TARs by SOBJ
+                    tars_by_sobj = {}
+                    for f in sorted(tars_dir.glob("*.json")):
+                        tar_data = json.loads(f.read_text())
+                        if tar_data.get("gate_passed"):
+                            sobj_id = tar_data.get("sobj_id", "SOBJ-01")
+                            tars_by_sobj.setdefault(sobj_id, []).append(tar_data)
+
+                    # Render and add one HTML per SOBJ
+                    meta = _load_session_meta(session_id)
+                    company_name = meta.get("company_name", "Company") if meta else "Company"
+                    for sobj_id, sobj_tars in tars_by_sobj.items():
+                        sobj_tars.sort(key=lambda t: rank_lookup.get(t.get("ta_id", ""), 999))
+                        html = _render_export_html(sobj_tars, company_name, sobj_id)
+                        zf.writestr(
+                            f"session_{session_id[:8]}/outputs/full_reports_{sobj_id}.html",
+                            html
+                        )
+                except Exception as e:
+                    print(f"[admin] Could not render HTML reports: {e}")
+
         # Jobs log from SQLite
         try:
             with get_jobs_conn() as conn:
