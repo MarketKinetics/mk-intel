@@ -16,3 +16,4 @@ kmodes==0.12.2
 rapidfuzz==3.6.1
 chromadb
 sentence-transformers
+openpyxl
