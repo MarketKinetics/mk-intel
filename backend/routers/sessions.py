@@ -144,6 +144,32 @@ def update_sobj(session_id: str, sobj_id: str, body: SOBJStatusUpdate):
     )
 
 
+@router.get("/{session_id}/export")
+def export_session(session_id: str):
+    """Export all session data as a ZIP file for the session owner."""
+    import io
+    import zipfile
+    import json
+    from fastapi.responses import StreamingResponse
+    from backend.routers.admin import _build_session_zip, _load_session_meta
+
+    path = SESSIONS_DIR / f"{session_id}.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    meta = _load_session_meta(session_id)
+    company_slug = (meta.get("company_name", "session") or "session").lower().replace(" ", "_")
+    filename = f"mk_intel_{company_slug}_{session_id[:8]}.zip"
+
+    buf = _build_session_zip(session_id)
+
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
 @router.get("/{session_id}/sobjs", response_model=list[SOBJResponse])
 def list_sobjs(session_id: str):
     session = _load_session(session_id)
