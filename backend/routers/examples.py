@@ -160,3 +160,32 @@ def get_example_tar_summary_html(slug: str, tar_id: str):
         summary_data["ta_id"],
         summary_data["sobj_id"],
     ))
+
+@router.get("/{slug}/tars/export/{sobj_id}")
+def export_example_tars_html(slug: str, sobj_id: str):
+    """Export all TARs for a given SOBJ as a single print-ready HTML file."""
+    from fastapi.responses import HTMLResponse
+    from backend.routers.pipeline import _render_export_html
+
+    meta = EXAMPLES.get(slug)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Example not found")
+
+    enriched_dir = _get_example_dir(slug) / "enriched"
+    tars_dir = enriched_dir / "tars"
+    if not tars_dir.exists():
+        raise HTTPException(status_code=404, detail="No TARs found")
+
+    tars = []
+    for f in sorted(tars_dir.glob("*.json")):
+        data = json.loads(f.read_text())
+        if data.get("sobj_id") == sobj_id and data.get("gate_passed"):
+            tars.append(data)
+
+    if not tars:
+        raise HTTPException(status_code=404, detail=f"No TARs found for {sobj_id}")
+
+    html = _render_export_html(tars, meta["name"], sobj_id)
+    return HTMLResponse(content=html, headers={
+        "Content-Disposition": f"inline; filename=mk-intel-{slug}-{sobj_id}.html"
+    })
