@@ -630,7 +630,7 @@ Current profile:
 
 Return a JSON object with these refined fields:
 {{
-    "company_specific_name": "3-6 word name describing this audience segment's behavioral role in the context of this specific company and campaign objective. Must be professional, specific, and action-oriented. Reflect what this audience DOES relative to the business goal — not just who they are demographically. Examples: 'Mobile-First Value-Conscious Renewers', 'High-LTV Passive Churn Risk', 'Budget-Sensitive Upgrade Candidates'.",
+    "company_specific_name": "3-6 word name describing this audience segment's behavioral role in the context of this specific company and campaign objective. Must be professional, specific, and action-oriented. Reflect what this audience DOES relative to the business goal — not just who they are demographically. IMPORTANT: if multiple segments share the same demographic archetype, you MUST differentiate the name using behavioral signals from company data (e.g. churn risk level, LTV tier, MRR level, subscription plan, engagement pattern). Examples: 'High-Churn Premium Subscribers', 'Low-Spend High-Value Churners', 'At-Risk Power Users'.",
     "psych_summary": "...",
     "media_summary": "...",
     "channel_implications": "...",
@@ -658,7 +658,7 @@ Current profile:
 
 Return a JSON object adjusting ONLY income-related content:
 {{
-    "company_specific_name": "3-6 word name describing this audience segment's behavioral role in the context of this specific company and campaign objective. Must be professional, specific, and action-oriented. Reflect what this audience DOES relative to the business goal. Examples: 'Price-Sensitive Mid-Tenure Renewers', 'Income-Constrained Upgrade Candidates'.",
+    "company_specific_name": "3-6 word name describing this audience segment's behavioral role in the context of this specific company and campaign objective. Must be professional, specific, and action-oriented. Reflect what this audience DOES relative to the business goal. IMPORTANT: if multiple segments share the same demographic archetype, differentiate using behavioral signals (churn risk, LTV, MRR, subscription plan). Examples: 'High-Churn Low-Spend Segment', 'Low-Risk Premium Renewers'.",
     "psych_summary": "...",
     "motivational_drivers": ["...", "..."],
     "key_barriers": ["...", "..."],
@@ -691,7 +691,7 @@ Current profile:
 
 Return a JSON object adjusting ONLY cultural/media/psych content:
 {{
-    "company_specific_name": "3-6 word name describing this audience segment's behavioral role in the context of this specific company and campaign objective. Must be professional, specific, and action-oriented. Reflect what this audience DOES relative to the business goal. Examples: 'Culturally-Distinct Retention Risk', 'Community-Driven Renewal Segment'.",
+    "company_specific_name": "3-6 word name describing this audience segment's behavioral role in the context of this specific company and campaign objective. Must be professional, specific, and action-oriented. Reflect what this audience DOES relative to the business goal. IMPORTANT: if multiple segments share the same demographic archetype, differentiate using behavioral signals (churn risk, LTV, MRR, subscription plan). Examples: 'Culturally-Distinct High-Churn Risk', 'Community-Driven Premium Renewers'.",
     "psych_summary": "...",
     "media_summary": "...",
     "channel_implications": "...",
