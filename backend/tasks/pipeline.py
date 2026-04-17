@@ -111,6 +111,15 @@ def run_prefilter(self, session_id: str, job_id: str):
                     # to pick up amended mappings, then rebuild TA cards)
                     ingestor.load_and_normalize(raw_file, force=True)
                     ingestor.compute_coverage(force=True)
+
+                    # Re-detect analysis mode after re-normalization
+                    # session.analysis_mode may be stale from the saved JSON
+                    if ingestor._df_norm is not None and "bta_eligible" in ingestor._df_norm.columns:
+                        bta_eligible_count = int(ingestor._df_norm["bta_eligible"].sum())
+                    else:
+                        bta_eligible_count = 0
+                    session.analysis_mode = "behavioral" if bta_eligible_count == 0 else "bta"
+
                     ingestor.cluster(force=True)
 
                     if session.analysis_mode == "behavioral":
@@ -127,8 +136,6 @@ def run_prefilter(self, session_id: str, job_id: str):
                     update_job(job_id, progress="Warning: no raw file found — skipping re-normalization.")
 
         update_job(job_id, progress="Loading TA cards...")
-        df = pd.read_parquet(enriched_dir / "ta_cards.parquet")
-        ta_cards = df.to_dict(orient="records")
         df = pd.read_parquet(enriched_dir / "ta_cards.parquet")
         ta_cards = df.to_dict(orient="records")
 
