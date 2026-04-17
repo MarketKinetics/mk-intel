@@ -395,7 +395,7 @@ class MKTARGenerator:
         print(f"[tar_generator] Stage 1: Profile refinement...")
 
         refined     = []
-        case_counts = {"A": 0, "B1": 0, "B2": 0, "C": 0}
+        case_counts = {"A": 0, "B1": 0, "B2": 0, "C": 0, "BEH": 0}
 
         for card in ta_cards:
             ta_id = card.get("ta_id", "unknown")
@@ -404,7 +404,32 @@ class MKTARGenerator:
 
             print(f"[tar_generator]   {ta_id} → Case {case}")
 
-            if case == "C":
+            if case == "BEH":
+                # Behavioral-only mode — no BTA baseline.
+                # Generate company-specific name AND a full behavioral profile
+                # using the extended LLM call that works from signals only.
+                beh_name, beh_profile = self._generate_profile_for_beh(card, company_context)
+                rp = RefinedTAProfile(
+                    ta_id           = ta_id,
+                    source_ta_card  = card,
+                    refinement_case = "BEH",
+                    refined_fields  = {
+                        "company_specific_name":  beh_name,
+                        "psych_summary":          beh_profile.get("psych_summary"),
+                        "media_summary":          beh_profile.get("media_summary"),
+                        "channel_implications":   beh_profile.get("channel_implications"),
+                        "motivational_drivers":   beh_profile.get("motivational_drivers"),
+                        "key_barriers":           beh_profile.get("key_barriers"),
+                        "trust_cues":             beh_profile.get("trust_cues"),
+                        "susceptibility_notes":   beh_profile.get("susceptibility_notes"),
+                        "messaging_implications": beh_profile.get("messaging_implications"),
+                    },
+                    locked_fields   = {},
+                    company_context = company_context,
+                    compliance_mode = self.compliance_mode,
+                    created_at      = datetime.now(timezone.utc).isoformat(),
+                )
+            elif case == "C":
                 # Already LLM-generated — skip profile refinement but generate company-specific name
                 case_c_name = self._generate_name_for_case_c(card, company_context)
                 rp = RefinedTAProfile(
@@ -470,6 +495,10 @@ class MKTARGenerator:
                     score = max(0.0, score - CONFIDENCE_PENALTY_CASE_C)
                     signals["confidence_penalty"] = f"-{CONFIDENCE_PENALTY_CASE_C} (Case C)"
 
+                if rp.refinement_case == "BEH":
+                    score = max(0.0, score - CONFIDENCE_PENALTY_CASE_C)
+                    signals["confidence_penalty"] = f"-{CONFIDENCE_PENALTY_CASE_C} (Behavioral profile — no census baseline)"
+
                 if rp.profile.get("is_ambiguous_bta"):
                     score = max(0.0, score - AMBIGUITY_PENALTY)
                     signals["ambiguity_penalty"] = f"-{AMBIGUITY_PENALTY} (ambiguous BTA)"
@@ -518,8 +547,9 @@ class MKTARGenerator:
 
     def _determine_refinement_case(self, card: dict) -> str:
         """
-        Determine the A/B1/B2/C refinement case for a TA card.
+        Determine the A/B1/B2/C/BEH refinement case for a TA card.
 
+        BEH: behavioral-only mode — no BTA matching, confidence_case = "BEH"
         C  : source_type = llm_inferred_custom_archetype
         A  : bta_match_confidence = high
         B2 : bta_race_validation = divergent (race diverges, income matches)
@@ -527,6 +557,10 @@ class MKTARGenerator:
              (income diverges; age+race gave structural match)
         Default → A (no ZIP enrichment applied or not_available)
         """
+        # Behavioral-only mode — detected from confidence_case field on card
+        if card.get("confidence_case") == "BEH" or card.get("bta_match_confidence") == "behavioral":
+            return "BEH"
+
         if card.get("source_type") == "llm_inferred_custom_archetype":
             return "C"
 
@@ -799,6 +833,91 @@ Return ONLY a JSON object:
 
         # Fallback to archetype name
         return archetype
+
+
+    def _generate_profile_for_beh(
+        self,
+        card:            dict,
+        company_context: str,
+    ) -> tuple[str, dict]:
+        """
+        Generate a full behavioral profile for a BEH (behavioral-only) TA card.
+
+        Unlike Case C (which just generates a name), BEH profiles need a full
+        psychographic/media/channel layer because there is no BTA baseline to
+        draw from. One LLM call generates both the name and all profile fields.
+
+        Returns:
+            (company_specific_name, profile_dict)
+        """
+        try:
+            from utils import get_client, log_api_usage
+        except ImportError:
+            from mk_intel.utils import get_client, log_api_usage
+
+        behavioral = {
+            k: v for k, v in card.get("behavioral_signals", {}).items()
+            if v is not None and not any(excl in k for excl in self._excluded_signals)
+        }
+        structural = card.get("structural_profile", "No demographic baseline available.")
+
+        prompt = f"""You are analyzing a customer audience segment identified purely from behavioral data.
+There is no demographic or census baseline available for this segment.
+Generate a complete audience profile based only on the behavioral signals provided.
+
+Company context: {company_context[:500]}
+
+Behavioral signals from company data:
+{json.dumps({k: v for k, v in list(behavioral.items())[:15]}, indent=2)}
+
+Structural note: {structural}
+
+Generate a professional audience profile. Base ALL claims on the behavioral signals above.
+Do NOT invent demographic details. Do NOT reference census data or population archetypes.
+Use "llm_inference" framing for any claims not directly supported by the signals.
+
+Return ONLY a JSON object with these fields:
+{{
+    "company_specific_name": "3-6 word name reflecting behavioral role for this company and campaign. Must be specific and action-oriented. IMPORTANT: if multiple segments may share similar behavioral patterns, differentiate using signal levels (churn risk, LTV, MRR). Examples: 'High-Churn Low-Spend Customers', 'At-Risk High-Value Users', 'Low-Engagement Premium Subscribers'.",
+    "psych_summary": "2-3 sentences describing likely psychological profile inferred from behavioral patterns. Frame as inference, not fact.",
+    "media_summary": "1-2 sentences on likely media/channel preferences inferred from engagement signals.",
+    "channel_implications": "1-2 sentences on best channels to reach this audience based on behavioral data.",
+    "motivational_drivers": ["driver 1", "driver 2", "driver 3"],
+    "key_barriers": ["barrier 1", "barrier 2"],
+    "trust_cues": ["cue 1", "cue 2"],
+    "susceptibility_notes": "1-2 sentences on likely persuasion levers given behavioral signals.",
+    "messaging_implications": "1-2 sentences on messaging tone and approach."
+}}
+Return ONLY the JSON object."""
+
+        fallback_name = card.get("archetype_name", f"Behavioral Cluster {card.get('cluster_id', '?')}")
+        fallback_profile = {
+            "psych_summary": "Behavioral profile — demographic baseline not available. Profile based on company data signals only.",
+            "media_summary": None,
+            "channel_implications": None,
+            "motivational_drivers": None,
+            "key_barriers": None,
+            "trust_cues": None,
+            "susceptibility_notes": None,
+            "messaging_implications": None,
+        }
+
+        try:
+            client   = get_client(self.session)
+            response = client.messages.create(
+                model      = "claude-haiku-4-5-20251001",
+                max_tokens = 800,
+                messages   = [{"role": "user", "content": prompt}],
+            )
+            log_api_usage(response, "beh_profile_generation", self.session)
+            raw    = response.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+            result = json.loads(raw)
+            name   = result.pop("company_specific_name", "").strip() or fallback_name
+            print(f"[tar_generator]   BEH profile generated: {name}")
+            return name, result
+        except Exception as e:
+            print(f"[tar_generator] ⚠ BEH profile generation failed: {e}")
+            return fallback_name, fallback_profile
 
 
     def _match_sobj_to_rules(

@@ -191,6 +191,13 @@ class MKSession:
     # Values: developer | byok | demo | blocked
     # Auto-detected by utils.detect_session_mode() if not set explicitly.
 
+    analysis_mode:      str                     = "bta"
+    # Values: bta | behavioral
+    # Set by mk_data_ingestor after coverage scoring.
+    # "bta"        — standard mode, BTA matching runs normally
+    # "behavioral" — no BTA-eligible records found, pipeline runs on
+    #                behavioral signals only, no census baseline layer.
+
     demo_token:         Optional[str]           = field(default=None, repr=False)
     # Auth token for demo mode sessions. Never serialized.
     # Provided by the demo auth system (Phase P6).
@@ -259,6 +266,7 @@ class MKSession:
             created_at=data["created_at"],
             updated_at=data["updated_at"],
             session_mode=data.get("session_mode", "developer"),
+            analysis_mode=data.get("analysis_mode", "bta"),
             demo_tokens_used=data.get("demo_tokens_used", 0),
             analyst_notes=data.get("analyst_notes"),
             error_log=data.get("error_log", []),
@@ -403,6 +411,7 @@ class MKSession:
             f"Session:  {self.session_id}",
             f"Status:   {self.status.value}",
             f"Mode:     {self.session_mode}",
+            f"Analysis: {self.analysis_mode}",
             f"Company:  {self.company.name if self.company else '—'}",
             f"OBJ:      {self.objective.statement if self.objective else '—'}",
             f"SOBJs:    {len(self.sobjs)} ({len(self.get_approved_sobjs())} approved)",

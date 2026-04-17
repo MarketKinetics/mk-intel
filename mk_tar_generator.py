@@ -356,21 +356,22 @@ class MKTARGenerator:
 ================
 Audience name  : {profile.get('company_specific_name') or profile.get('archetype_name', 'Unknown')}
 Archetype base : {profile.get('archetype_name', 'Unknown')}
-Source BTA     : {profile.get('source_bta_id', 'Unknown')}
+Source BTA     : {profile.get('source_bta_id') or 'None — behavioral profile'}
 Cluster        : {profile.get('cluster_id', 'Unknown')}
-Confidence case: {candidate.confidence_case} (A=full alignment, B1=income diverges, B2=race diverges, C=LLM custom)
+Confidence case: {candidate.confidence_case} (A=full alignment, B1=income diverges, B2=race diverges, C=LLM custom, BEH=behavioral only)
 BTA confidence : {profile.get('bta_match_confidence', 'unknown')}
 
 IMPORTANT: Refer to this audience throughout the report as "{profile.get('company_specific_name') or profile.get('archetype_name', 'Unknown')}" — do NOT use the archetype base name as the primary audience identifier.
+{"IMPORTANT: This is a behavioral-only profile. There is NO census or demographic baseline. Base ALL claims on company data signals. Label any inferences as llm_inference. Do not reference demographic archetypes or population statistics." if candidate.confidence_case == "BEH" else ""}
 
 Structural profile:
 {json.dumps(structural, indent=2)}
 
 Psychographic summary:
-{profile.get('psych_summary', 'Not available')}
+{profile.get('psych_summary') or ('Not available — behavioral profile only. Infer from behavioral signals.' if candidate.confidence_case == 'BEH' else 'Not available')}
 
 Media summary:
-{profile.get('media_summary', 'Not available')}
+{profile.get('media_summary') or ('Not available — behavioral profile only. Infer from channel/engagement signals.' if candidate.confidence_case == 'BEH' else 'Not available')}
 
 Motivational drivers:
 {profile.get('motivational_drivers', 'Not available')}
@@ -959,7 +960,7 @@ TAR SUMMARY:
 
 TASK: Complete traceability — sources, assumptions, confidence, ethical guardrails.
 
-Note: Case C confidence cases should reflect lower overall confidence.
+{"IMPORTANT: This is a BEHAVIORAL PROFILE (confidence case BEH). There is NO census or demographic baseline. All psychographic and media claims are LLM-inferred from behavioral signals only. The traceability section MUST explicitly note the absence of population-level demographic grounding. Flag all non-behavioral claims as llm_inference." if candidate.confidence_case == "BEH" else "Note: Case C confidence cases should reflect lower overall confidence."}
 llm_inference tagged claims should be explicitly flagged in assumptions.
 
 Return JSON:
