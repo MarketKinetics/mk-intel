@@ -40,6 +40,7 @@ def _to_response(session: MKSession) -> SessionResponse:
         session_id     = session.session_id,
         status         = session.status.value,
         session_mode   = session.session_mode,
+        analysis_mode  = getattr(session, 'analysis_mode', 'bta'),
         company_name   = session.company.name if session.company else None,
         obj_statement  = session.objective.statement if session.objective else None,
         sobj_count     = len(session.sobjs),
@@ -56,9 +57,14 @@ def create_session():
     return _to_response(session)
 
 
-@router.get("/{session_id}", response_model=SessionResponse)
+@router.get("/{session_id}")
 def get_session(session_id: str):
-    return _to_response(_load_session(session_id))
+    session = _load_session(session_id)
+    response = _to_response(session)
+    # Return as dict to include analysis_mode which may not be in SessionResponse model
+    d = response.dict() if hasattr(response, 'dict') else response.__dict__
+    d['analysis_mode'] = getattr(session, 'analysis_mode', 'bta')
+    return d
 
 
 @router.delete("/{session_id}")
