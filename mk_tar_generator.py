@@ -862,7 +862,12 @@ TASK: Build the persuasion logic and recommended actions.
 
 Main argument structure: if [premise] then [consequence].
 Supporting arguments must trace to specific condition/vulnerability IDs.
-Actions must link to vulnerabilities, conditions, and arguments.
+
+IMPORTANT on recommended_actions: Generate 3-5 concise directional actions only.
+These are strategic starting points for campaign planning — NOT a campaign plan.
+Each action should be one clear sentence describing WHAT to do and WHY (source-tagged).
+Do NOT specify timing, creative briefs, copy, frequencies, or detailed channel specs.
+A separate platform (MK Campaign) will handle campaign execution details.
 
 Return JSON:
 {{
@@ -898,12 +903,8 @@ Return JSON:
         {{
             "action_id": "ACT1",
             "action_type": "message|offer|product_change|experience_change|partner_action|policy_change|customer_success_outreach|community_activation|content_asset|event",
-            "description": "concrete action",
-            "linked_vulnerability_ids": ["M1"],
-            "linked_condition_ids": ["EC1"],
-            "linked_argument_id": "A1",
-            "channel": "which channel delivers this",
-            "sequencing_order": 1
+            "description": "One clear sentence: what to do and why this audience needs it.",
+            "rationale_source": "company_data|bta_baseline|llm_inference"
         }}
     ]
 }}
@@ -979,10 +980,9 @@ Return JSON:
             "risk_if_wrong": "what breaks if this assumption is incorrect"
         }}
     ],
-    "confidence": {{
-        "level": "low|medium|high",
-        "rationale": "explain based on data richness, confidence case, and proportion of llm_inference claims"
-    }},
+    "confidence_level": "low|medium|high",
+    "confidence_rationale": "explain based on data richness, confidence case, and proportion of llm_inference claims",
+    "limitations": "explicit statement of what this analysis cannot tell you — missing data, absence of demographic baseline, unvalidated inferences. For BEH profiles this MUST note the absence of population-level demographic grounding.",
     "ethical_guardrails": {{
         "excluded_tactics": ["tactics that must not be used with this TA"],
         "privacy_constraints": ["data handling constraints"],
