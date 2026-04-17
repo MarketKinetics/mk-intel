@@ -76,9 +76,59 @@ def run_prefilter(self, session_id: str, job_id: str):
 
         company_name = session.company.name if session.company else "unknown"
         slug = company_name.lower().replace(" ", "_")
-        enriched_dir = DATA_DIR / "company_data" / f"{slug}_{session_id[:8]}" / "enriched"
+        company_dir  = DATA_DIR / "company_data" / f"{slug}_{session_id[:8]}"
+        enriched_dir = company_dir / "enriched"
+        normalized_dir = company_dir / "normalized"
+
+        # ── Re-normalization if mapping was amended ───────────────────────────
+        # The ingest step runs normalization before the user reviews the mapping.
+        # If the user amended any field mappings in the review screen, we must
+        # re-run normalization with the corrected mapping before prefilter runs.
+        mapping_path = normalized_dir / "column_mapping.json"
+        if mapping_path.exists():
+            mapping_data = json.loads(mapping_path.read_text())
+            if mapping_data.get("user_amended"):
+                update_job(job_id, progress="Applying amended column mapping — re-normalizing...")
+                from pathlib import Path as P
+                from mk_data_ingestor import MKDataIngestor
+                from mk_intel_session import MKSession as S
+                ZCTA_PATH = P("/app/bta_data/zcta_enrichment.parquet")
+
+                # Find the raw uploaded file
+                raw_dir = company_dir / "raw"
+                raw_files = list(raw_dir.iterdir()) if raw_dir.exists() else []
+                if raw_files:
+                    raw_file = raw_files[0]
+                    ingestor = MKDataIngestor(
+                        session           = session,
+                        company_data_root = DATA_DIR / "company_data",
+                        compliance_mode   = "standard",
+                        sector            = None,
+                        zcta_path         = ZCTA_PATH if ZCTA_PATH.exists() else None,
+                    )
+                    # Force re-run normalization and coverage only
+                    # (clustering and BTA matching already done — re-run from scratch
+                    # to pick up amended mappings, then rebuild TA cards)
+                    ingestor.load_and_normalize(raw_file, force=True)
+                    ingestor.compute_coverage(force=True)
+                    ingestor.cluster(force=True)
+
+                    if session.analysis_mode == "behavioral":
+                        ingestor.build_behavioral_ta_cards(force=True)
+                    else:
+                        ingestor.match_btas(force=True)
+                        ingestor.enrich_zip(force=True)
+                        ingestor.build_ta_cards(force=True)
+
+                    ingestor.save()
+                    session.save(str(SESSIONS_DIR))
+                    update_job(job_id, progress="Re-normalization complete.")
+                else:
+                    update_job(job_id, progress="Warning: no raw file found — skipping re-normalization.")
 
         update_job(job_id, progress="Loading TA cards...")
+        df = pd.read_parquet(enriched_dir / "ta_cards.parquet")
+        ta_cards = df.to_dict(orient="records")
         df = pd.read_parquet(enriched_dir / "ta_cards.parquet")
         ta_cards = df.to_dict(orient="records")
 
