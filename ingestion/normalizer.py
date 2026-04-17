@@ -164,35 +164,55 @@ SYNONYMS: dict[str, str] = {
     "customer_since": "customer_since", "join_date": "customer_since",
     "signup_date": "customer_since", "created_at": "customer_since",
     "registration_date": "customer_since", "first_purchase_date": "customer_since",
-    "member_since": "customer_since",
+    "member_since": "customer_since", "account_created": "customer_since",
+    "date_joined": "customer_since", "enrollment_date": "customer_since",
 
     # sessions
     "sessions_last_7d": "sessions_last_7d", "sessions_7d": "sessions_last_7d",
     "sessions_last_30d": "sessions_last_30d", "sessions_30d": "sessions_last_30d",
     "sessions_last_90d": "sessions_last_90d", "sessions_90d": "sessions_last_90d",
     "logins_30d": "sessions_last_30d", "logins_90d": "sessions_last_90d",
+    "app_sessions": "sessions_last_30d", "app_sessions_30d": "sessions_last_30d",
+    "hourspend_on_app": "sessions_last_30d", "hour_spend_on_app": "sessions_last_30d",
+    "hourspend": "sessions_last_30d", "time_on_app": "sessions_last_30d",
+    "hours_on_app": "sessions_last_30d",
 
     # last_active
     "last_active_date": "last_active_date", "last_login": "last_active_date",
     "last_seen": "last_active_date", "last_activity": "last_active_date",
-    "last_active": "last_active_date",
+    "last_active": "last_active_date", "last_visit": "last_active_date",
+    "last_session_date": "last_active_date",
 
     # days_since_active
     "days_since_active": "days_since_active", "days_inactive": "days_since_active",
     "days_since_login": "days_since_active",
+    # NOTE: "tenure" and "tenure_months" map here — duration since last activity,
+    # not housing tenure. These are unambiguous in a B2C customer dataset context.
+    "tenure": "days_since_active", "tenure_months": "days_since_active",
+    "customer_tenure": "days_since_active", "account_tenure": "days_since_active",
+    "membership_months": "days_since_active", "months_tenure": "days_since_active",
+    "months_with_company": "days_since_active", "months_on_book": "days_since_active",
 
     # feature adoption
     "feature_adoption_count": "feature_adoption_count",
     "features_used": "feature_adoption_count",
+    "features_adopted": "feature_adoption_count",
+    "products_used": "feature_adoption_count",
+    "add_ons_used": "feature_adoption_count",
+    "addons_used": "feature_adoption_count",
     "feature_adoption_tier": "feature_adoption_tier",
 
     # nps
     "nps_score": "nps_score", "nps": "nps_score", "net_promoter_score": "nps_score",
+    "net_promoter": "nps_score", "promoter_score": "nps_score",
     "nps_tier": "nps_tier", "nps_category": "nps_tier",
 
     # support tickets
     "support_tickets_total": "support_tickets_total",
     "total_tickets": "support_tickets_total",
+    "complaints": "support_tickets_total", "complain": "support_tickets_total",
+    "complaint_count": "support_tickets_total", "support_contacts": "support_tickets_total",
+    "cases_total": "support_tickets_total", "tickets_total": "support_tickets_total",
     "support_tickets_90d": "support_tickets_90d", "tickets_90d": "support_tickets_90d",
 
     # cancellation
@@ -201,40 +221,60 @@ SYNONYMS: dict[str, str] = {
 
     # subscription
     # NOTE: "status" and "tier" removed — too generic.
-    # "status" could be account_status, ticket_status, lifecycle_stage, payment_status etc.
-    # "tier" could be subscription_plan, income_tier, feature_adoption_tier etc.
-    # Both go through LLM layer for context-aware mapping.
     "subscription_plan": "subscription_plan", "plan": "subscription_plan",
-    "plan_name": "subscription_plan",
+    "plan_name": "subscription_plan", "plan_type": "subscription_plan",
+    "contract": "subscription_plan", "contract_type": "subscription_plan",
     "subscription_status": "subscription_status",
     "sub_status": "subscription_status",
+    # Binary churn flags — unambiguous in B2C context, map to subscription_status
+    "churn": "subscription_status", "churned": "subscription_status",
+    "is_churned": "subscription_status", "churn_flag": "subscription_status",
+    "churn_label": "subscription_status", "churn_value": "subscription_status",
+    "attrited": "subscription_status", "is_active": "subscription_status",
+    "active_customer": "subscription_status", "customer_churned": "subscription_status",
 
     # revenue
     "mrr": "mrr", "monthly_recurring_revenue": "mrr",
+    "monthly_charge": "mrr", "monthly_charges": "mrr",
+    "monthly_revenue": "mrr", "monthly_spend": "mrr", "monthly_fee": "mrr",
     "arr": "arr", "annual_recurring_revenue": "arr",
     "ltv": "ltv", "lifetime_value": "ltv", "customer_ltv": "ltv",
     "clv": "ltv", "customer_lifetime_value": "ltv",
+    "cltv": "ltv", "predicted_ltv": "ltv",
 
     # purchases
     "total_purchases": "total_purchases", "purchase_count": "total_purchases",
     "purchases_last_30d": "purchases_last_30d", "orders_30d": "purchases_last_30d",
+    "order_count": "purchases_last_30d", "ordercount": "purchases_last_30d",
+    "orders_last_30d": "purchases_last_30d", "purchases_30d": "purchases_last_30d",
+    "monthly_orders": "purchases_last_30d",
     "purchases_last_90d": "purchases_last_90d", "orders_90d": "purchases_last_90d",
     "avg_order_value": "avg_order_value", "aov": "avg_order_value",
-    "average_order_value": "avg_order_value",
+    "average_order_value": "avg_order_value", "average_basket": "avg_order_value",
+    "basket_size": "avg_order_value", "avg_basket_value": "avg_order_value",
+    "average_transaction": "avg_order_value", "avg_transaction_value": "avg_order_value",
 
     # dates
     "last_purchase_date": "last_purchase_date", "last_order_date": "last_purchase_date",
     "days_since_purchase": "days_since_purchase",
+    "days_since_last_order": "days_since_purchase",
+    "days_since_last_purchase": "days_since_purchase",
+    "daysincelastorder": "days_since_purchase", "last_order_days": "days_since_purchase",
+    "recency": "days_since_purchase", "recency_days": "days_since_purchase",
 
     # payments
     "payment_failures_total": "payment_failures_total",
     "failed_payments": "payment_failures_total",
     "discount_usage_pct": "discount_usage_pct", "discount_rate": "discount_usage_pct",
+    "coupon_used": "discount_usage_pct", "couponused": "discount_usage_pct",
+    "discount_used": "discount_usage_pct", "promo_used": "discount_usage_pct",
+    "voucher_used": "discount_usage_pct", "coupon_usage": "discount_usage_pct",
 
-    # lifecycle / churn
+    # lifecycle / churn risk score
     "lifecycle_stage": "lifecycle_stage", "customer_stage": "lifecycle_stage",
     "churn_risk_score": "churn_risk_score", "churn_score": "churn_risk_score",
-    "churn_probability": "churn_risk_score",
+    "churn_probability": "churn_risk_score", "churn_propensity": "churn_risk_score",
+    "attrition_score": "churn_risk_score", "attrition_probability": "churn_risk_score",
     "churn_risk_tier": "churn_risk_tier", "churn_risk": "churn_risk_tier",
 
     # renewal
@@ -251,18 +291,28 @@ SYNONYMS: dict[str, str] = {
 
     # engagement
     "email_open_rate": "email_open_rate", "open_rate": "email_open_rate",
+    "email_opens": "email_open_rate", "email_open_pct": "email_open_rate",
     "email_click_rate": "email_click_rate", "click_rate": "email_click_rate",
     "push_opt_in": "push_opt_in", "sms_opt_in": "sms_opt_in",
     "preferred_channel": "preferred_channel",
+    "preferred_login_device": "preferred_channel",
+    "preferredlogindevice": "preferred_channel",
+    "login_device": "preferred_channel", "preferred_device": "preferred_channel",
 
-    # reviews
+    # reviews / satisfaction
     "reviews_submitted": "reviews_submitted", "review_count": "reviews_submitted",
     "avg_review_score": "avg_review_score", "average_rating": "avg_review_score",
+    "satisfaction_score": "avg_review_score", "satisfactionscore": "avg_review_score",
+    "csat": "avg_review_score", "csat_score": "avg_review_score",
+    "star_rating": "avg_review_score", "review_rating": "avg_review_score",
 
     # e-commerce
     "cart_abandonment_rate": "cart_abandonment_rate",
     "cart_abandon_rate": "cart_abandonment_rate",
     "return_rate": "return_rate", "product_categories_purchased": "product_categories_purchased",
+    "preferedordercat": "product_categories_purchased",
+    "preferred_order_cat": "product_categories_purchased",
+    "product_category": "product_categories_purchased",
 
     # banking
     "account_type": "account_type", "account_status": "account_status",
