@@ -183,25 +183,6 @@ SOBJ_CONTEXT_EXCLUSIONS: dict[str, list[str]] = {
     "lapsed":       ["churn_risk_score"],
 }
 
-# SOBJ-to-behavioral Tier 1 field map for behavioral-only mode.
-# Maps SOBJ keywords to the raw behavioral fields (non-aggregated) that
-# are most informative for clustering in that SOBJ context.
-# Used in _infer_behavioral_tier1() to dynamically rank clustering features.
-SOBJ_BEHAVIORAL_TIER1: dict[str, list[str]] = {
-    "churn":        ["churn_risk_score", "ltv", "mrr", "sessions_last_30d", "subscription_status"],
-    "retain":       ["churn_risk_score", "ltv", "mrr", "sessions_last_30d", "subscription_status"],
-    "cancel":       ["churn_risk_score", "ltv", "mrr", "sessions_last_30d", "subscription_status"],
-    "renew":        ["ltv", "churn_risk_score", "mrr", "days_since_active", "subscription_status"],
-    "reactivat":    ["days_since_active", "ltv", "mrr", "churn_risk_score", "total_purchases"],
-    "lapsed":       ["days_since_active", "ltv", "mrr", "churn_risk_score", "total_purchases"],
-    "upgrade":      ["ltv", "nps_score", "feature_adoption_count", "sessions_last_30d", "mrr"],
-    "upsell":       ["ltv", "nps_score", "feature_adoption_count", "sessions_last_30d", "mrr"],
-    "onboard":      ["onboarding_completion_pct", "feature_adoption_count", "sessions_last_30d", "days_since_active"],
-    "adopt":        ["onboarding_completion_pct", "feature_adoption_count", "sessions_last_30d", "days_since_active"],
-    "engag":        ["sessions_last_30d", "days_since_active", "email_open_rate", "ltv"],
-    "refer":        ["nps_score", "ltv", "sessions_last_30d", "total_purchases"],
-}
-
 # Gate 3 — Low cardinality threshold for numeric fields
 # Numeric fields with fewer unique non-null values than this threshold
 # are excluded from clustering — they behave as step functions rather
@@ -289,34 +270,10 @@ class MKDataIngestor:
 
         self.load_and_normalize(file_path, force=force)
         self.compute_coverage(force=force)
-
-        # ── Behavioral mode detection ─────────────────────────────────────────
-        # After coverage scoring, check if any records are BTA-eligible.
-        # If bta_eligible_count == 0, switch to behavioral-only mode and
-        # skip BTA matching and ZIP enrichment entirely.
-        if self._df_norm is not None and "bta_eligible" in self._df_norm.columns:
-            bta_eligible_count = int(self._df_norm["bta_eligible"].sum())
-        else:
-            bta_eligible_count = 0
-
-        if bta_eligible_count == 0:
-            print(f"\n[ingestor] ⚠ No BTA-eligible records found.")
-            print(f"[ingestor] Switching to behavioral-only analysis mode.")
-            print(f"[ingestor] BTA matching and ZIP enrichment will be skipped.")
-            self.session.analysis_mode = "behavioral"
-        else:
-            print(f"\n[ingestor] BTA mode: {bta_eligible_count:,} eligible records.")
-            self.session.analysis_mode = "bta"
-
         self.cluster(force=force)
-
-        if self.session.analysis_mode == "bta":
-            self.match_btas(force=force)
-            self.enrich_zip(force=force)
-            self.build_ta_cards(force=force)
-        else:
-            self.build_behavioral_ta_cards(force=force)
-
+        self.match_btas(force=force)
+        self.enrich_zip(force=force)
+        self.build_ta_cards(force=force)
         self.save()
 
         return self.session
@@ -1035,245 +992,6 @@ class MKDataIngestor:
         return self._ta_cards
 
 
-    def build_behavioral_ta_cards(self, force: bool = False) -> list[dict]:
-        """
-        Step 5 (behavioral mode) — Build TA cards from behavioral clusters only.
-
-        Used when analysis_mode == "behavioral" (bta_eligible_count == 0).
-        No BTA matching. All clusters get confidence_case = "BEH".
-        One TA card per cluster that passes the minimum cell size threshold.
-
-        Returns:
-            List of behavioral TA card dicts.
-        """
-        ta_path = self.enriched_dir / "ta_cards.parquet"
-
-        if ta_path.exists() and not force:
-            print(f"[ingestor] Step 5 (behavioral): Loading existing TA cards...")
-            df_ta = pd.read_parquet(ta_path)
-            self._ta_cards = df_ta.to_dict("records")
-            print(f"[ingestor] Step 5 (behavioral): ✓ Loaded {len(self._ta_cards)} TA cards")
-            return self._ta_cards
-
-        print(f"[ingestor] Step 5 (behavioral): Building behavioral TA cards...")
-
-        if self._df_norm is None:
-            self._df_norm = pd.read_parquet(
-                self.normalized_dir / "normalized_records.parquet"
-            )
-        if self._df_cluster is None:
-            self._df_cluster = pd.read_parquet(
-                self.clustering_dir / "cluster_assignments.parquet"
-            )
-
-        total = len(self._df_norm)
-        min_cell = min(MIN_CELL_ABS, int(total * MIN_CELL_PCT))
-
-        # Merge cluster assignments into normalized records
-        df_merged = self._df_norm.merge(
-            self._df_cluster[["customer_id", "cluster_id"]],
-            on="customer_id",
-            how="left",
-        )
-
-        self._ta_cards = []
-        cluster_ids = sorted(df_merged["cluster_id"].dropna().unique())
-
-        for cluster_id in cluster_ids:
-            cluster_id = int(cluster_id)
-            cell_df = df_merged[df_merged["cluster_id"] == cluster_id]
-            cell_size = len(cell_df)
-
-            if cell_size < min_cell:
-                print(f"[ingestor]   Cluster {cluster_id}: below threshold "
-                      f"({cell_size} < {min_cell}) — skipped")
-                continue
-
-            ta_card = self._build_behavioral_ta_card(
-                cluster_id = cluster_id,
-                cell_df    = cell_df,
-                cell_size  = cell_size,
-                total      = total,
-            )
-            self._ta_cards.append(ta_card)
-
-        # ── Save ──────────────────────────────────────────────────────────────
-        self.enriched_dir.mkdir(parents=True, exist_ok=True)
-
-        # Also write a stub candidate_tas.json so downstream code doesn't break
-        self.bta_dir.mkdir(parents=True, exist_ok=True)
-        stub_candidates = [
-            {"cluster_id": card["cluster_id"], "bta_id": None,
-             "customer_count": card["cell_size"]}
-            for card in self._ta_cards
-        ]
-        with open(self.bta_dir / "candidate_tas.json", "w") as f:
-            json.dump(stub_candidates, f, indent=2)
-
-        df_ta = pd.DataFrame(self._ta_cards)
-        df_ta.to_parquet(ta_path, index=False)
-        df_ta.to_csv(self.enriched_dir / "ta_cards.csv", index=False)
-
-        jsonl_path = self.enriched_dir / "session_ta_corpus.jsonl"
-        with open(jsonl_path, "w", encoding="utf-8") as f:
-            for card in self._ta_cards:
-                f.write(json.dumps(card, default=_json_serializer) + "\n")
-
-        print(f"[ingestor] Step 5 (behavioral): ✓ {len(self._ta_cards)} TA cards built")
-        for card in self._ta_cards:
-            print(f"[ingestor]   {card['ta_id']} — "
-                  f"{card['archetype_name']} | "
-                  f"n={card['cell_size']} | "
-                  f"confidence={card['confidence_tier']}")
-
-        return self._ta_cards
-
-
-    def _build_behavioral_ta_card(
-        self,
-        cluster_id: int,
-        cell_df:    pd.DataFrame,
-        cell_size:  int,
-        total:      int,
-    ) -> dict:
-        """
-        Build a single behavioral TA card from a cluster — no BTA matching.
-
-        Uses the same schema as a standard TA card but:
-        - source_bta_id = None
-        - archetype_name = behavioral cluster description
-        - confidence_case = "BEH"
-        - bta_match_confidence = "behavioral"
-        - structural_profile = derived from behavioral medians/modes
-        - psych/media fields = None (will be LLM-generated in prefilter)
-        """
-        from datetime import datetime, timezone
-
-        # ── Behavioral signal aggregates ──────────────────────────────────────
-        behavioral_signals = {}
-        numeric_fields = [
-            "ltv", "mrr", "arr", "churn_risk_score", "sessions_last_30d",
-            "sessions_last_90d", "days_since_active", "nps_score",
-            "feature_adoption_count", "total_purchases", "purchases_last_30d",
-            "avg_order_value", "support_tickets_total", "support_tickets_90d",
-            "onboarding_completion_pct", "email_open_rate", "email_click_rate",
-            "discount_usage_pct", "avg_review_score", "days_since_purchase",
-        ]
-        for field in numeric_fields:
-            if field in cell_df.columns:
-                vals = cell_df[field].dropna()
-                if not vals.empty:
-                    behavioral_signals[f"{field}_median"] = round(float(vals.median()), 4)
-                    behavioral_signals[f"{field}_mean"]   = round(float(vals.mean()), 4)
-
-        # Categorical dominants
-        categorical_fields = [
-            "subscription_status", "subscription_plan", "preferred_channel",
-            "churn_risk_tier", "lifecycle_stage",
-        ]
-        for field in categorical_fields:
-            if field in cell_df.columns:
-                vals = cell_df[field].dropna()
-                if not vals.empty:
-                    behavioral_signals[f"{field}_dominant"] = str(vals.mode().iloc[0])
-
-        # ── Structural profile (behavioral) ───────────────────────────────────
-        # Use available demographic fields if present, otherwise note absence
-        structural_parts = []
-        for field, label in [
-            ("marital_status", "marital"), ("gender", "sex"),
-            ("education", "education"), ("housing_tenure", "tenure"),
-        ]:
-            if field in cell_df.columns:
-                vals = cell_df[field].dropna()
-                if not vals.empty:
-                    structural_parts.append(f"{label}={vals.mode().iloc[0]}")
-
-        structural_profile = (
-            "Behavioral cluster — demographic baseline not available. "
-            + (f"Available signals: {', '.join(structural_parts)}." if structural_parts
-               else "Analysis based on behavioral signals only.")
-        )
-
-        # ── Coverage ──────────────────────────────────────────────────────────
-        coverage_score = 0.0
-        if "coverage_score" in cell_df.columns:
-            coverage_score = round(float(cell_df["coverage_score"].mean()), 4)
-
-        # ── Archetype name (plain behavioral description) ─────────────────────
-        churn_risk = behavioral_signals.get("churn_risk_score_mean")
-        ltv        = behavioral_signals.get("ltv_median")
-        mrr        = behavioral_signals.get("mrr_median")
-        sub_status = behavioral_signals.get("subscription_status_dominant", "unknown")
-
-        desc_parts = []
-        if churn_risk is not None:
-            tier = "high" if churn_risk > 0.6 else ("medium" if churn_risk > 0.3 else "low")
-            desc_parts.append(f"{tier} churn risk")
-        if mrr is not None:
-            desc_parts.append(f"MRR ${mrr:.0f}")
-        if ltv is not None:
-            desc_parts.append(f"LTV ${ltv:.0f}")
-        if sub_status != "unknown":
-            desc_parts.append(sub_status)
-
-        archetype_name = (
-            f"Behavioral Cluster {cluster_id}"
-            + (f" — {', '.join(desc_parts)}" if desc_parts else "")
-        )
-
-        ta_id = f"CS{cluster_id:02d}_BEH"
-
-        return {
-            "ta_id":                    ta_id,
-            "source_bta_id":            None,
-            "cluster_id":               cluster_id,
-            "archetype_name":           archetype_name,
-            "cell_size":                cell_size,
-            "pct_of_dataset":           round(cell_size / total, 4),
-            "dominant_age_bin":         None,
-            "dominant_sex_label":       None,
-            "dominant_race_eth":        None,
-            "dominant_edu_tier":        None,
-            "dominant_emp_tier":        None,
-            "dominant_household_income_tier": None,
-            "dominant_income_tier":     None,
-            "dominant_mar_tier":        None,
-            "dominant_tenure":          None,
-            "structural_profile":       structural_profile,
-            "psych_signals":            None,
-            "psych_summary":            None,
-            "motivational_drivers":     None,
-            "key_barriers":             None,
-            "trust_cues":               None,
-            "susceptibility_notes":     None,
-            "media_signals":            None,
-            "media_summary":            None,
-            "channel_implications":     None,
-            "behavioral_signals":       behavioral_signals,
-            "messaging_implications":   None,
-            "offer_implications":       None,
-            "coverage_score":           coverage_score,
-            "confidence_tier":          "low",
-            "bta_match_score":          0.0,
-            "match_methods":            {"behavioral_only": cell_size},
-            "data_source":              "company_data_only",
-            "has_business_behavioral":  True,
-            "created_at":               datetime.now(timezone.utc).isoformat(),
-            "session_id":               self.session.session_id,
-            "bta_match_confidence":     "behavioral",
-            "is_ambiguous_bta":         False,
-            "ambiguity_group":          None,
-            "competing_bta_ids":        None,
-            "ambiguity_note":           None,
-            "zip_inferred_income_tier": None,
-            "zip_inferred_race_eth":    None,
-            "bta_race_validation":      None,
-            # Behavioral mode flag — read by prefilter and generator
-            "confidence_case":          "BEH",
-        }
-
-
     def save(self) -> None:
         """
         Step 6 — Update session.proprietary_data and finalize.
@@ -1318,13 +1036,6 @@ class MKDataIngestor:
                 if ta_id and ta_id in valid_ta_ids:
                     segment_mapping[str(row["customer_id"])] = ta_id
                 # Customers in thin cells or non-US: no segment mapping entry
-        elif self.session.analysis_mode == "behavioral" and self._df_cluster is not None:
-            # Behavioral mode — map customers to behavioral TA IDs
-            for _, row in self._df_cluster.iterrows():
-                cid   = int(row.get("cluster_id", -1))
-                ta_id = f"CS{cid:02d}_BEH"
-                if ta_id in valid_ta_ids:
-                    segment_mapping[str(row["customer_id"])] = ta_id
 
         try:
             from mk_intel_session import ProprietaryDataset
@@ -1340,7 +1051,6 @@ class MKDataIngestor:
             coverage_stats    = coverage_stats,
             ingest_notes      = (
                 f"Ingestion complete. "
-                f"Analysis mode: {self.session.analysis_mode}. "
                 f"{cluster_stats.get('k', '?')} behavioral clusters. "
                 f"{len(self._ta_cards)} TA cards generated. "
                 f"Session dir: {self.session_dir}"
@@ -1512,38 +1222,6 @@ class MKDataIngestor:
         return eligible, all_excluded
 
 
-    def _infer_behavioral_tier1(self) -> list[str]:
-        """
-        Dynamically infer Tier 1 behavioral features from approved SOBJs.
-
-        Reads the SOBJ statements, matches against SOBJ_BEHAVIORAL_TIER1 keywords,
-        and returns an ordered list of fields most relevant for clustering given
-        the campaign objective.
-
-        Falls back to the default BEHAVIORAL_CLUSTER_FEATURES[:5] if no match found.
-
-        Returns:
-            Ordered list of field names — most important first.
-        """
-        sobjs = []
-        if self.session and hasattr(self.session, "get_approved_sobjs"):
-            sobjs = self.session.get_approved_sobjs()
-
-        if not sobjs:
-            return BEHAVIORAL_CLUSTER_FEATURES[:5]
-
-        statements = " ".join([s.statement.lower() for s in sobjs])
-
-        # Find first matching keyword and return its Tier 1 list
-        for keyword, tier1_fields in SOBJ_BEHAVIORAL_TIER1.items():
-            if keyword in statements:
-                print(f"[ingestor]   Behavioral Tier 1 inferred from SOBJ keyword '{keyword}': {tier1_fields}")
-                return tier1_fields
-
-        # No match — fall back to static Tier 1
-        print(f"[ingestor]   Behavioral Tier 1: no SOBJ keyword match, using default Tier 1")
-        return BEHAVIORAL_CLUSTER_FEATURES[:5]
-
     def _behavioral_features(
         self,
         df: pd.DataFrame,
@@ -1556,9 +1234,6 @@ class MKDataIngestor:
             - have <= 40% missing values
             - are numeric
 
-        In behavioral-only mode, Tier 1 is dynamically inferred from the SOBJ
-        signal map. In BTA mode, the static BEHAVIORAL_CLUSTER_FEATURES[:5] is used.
-
         Returns:
             (scaled_array, feature_names) or (None, []) if < 2 features available.
         """
@@ -1567,16 +1242,6 @@ class MKDataIngestor:
 
         # ── Gates 1 + 2: infer excluded features from OBJ/SOBJ context ─────────
         gate1_2_excluded = self._infer_excluded_features()
-
-        # ── Determine Tier 1 — static or SOBJ-dynamic ────────────────────────
-        is_behavioral_mode = (
-            hasattr(self.session, "analysis_mode") and
-            self.session.analysis_mode == "behavioral"
-        )
-        tier1_fields = (
-            self._infer_behavioral_tier1() if is_behavioral_mode
-            else BEHAVIORAL_CLUSTER_FEATURES[:5]
-        )
 
         # ── Missingness filter + Gate 1+2 exclusions ──────────────────────────
         available = []
@@ -1600,7 +1265,7 @@ class MKDataIngestor:
         # ── Require at least 2 Tier-1 features ───────────────────────────────
         tier1 = [
             f for f in available
-            if f in tier1_fields
+            if f in BEHAVIORAL_CLUSTER_FEATURES[:5]
         ]
         if len(tier1) < 2:
             return None, []
@@ -1659,7 +1324,9 @@ class MKDataIngestor:
             for k in k_range:
                 km     = KMeans(n_clusters=k, random_state=42, n_init=10)
                 labels = km.fit_predict(features)
-                sil    = silhouette_score(features, labels, sample_size=min(n, 5000))
+                sil    = silhouette_score(features, labels,
+                                          sample_size=min(n, 5000),
+                                          random_state=42)
                 silhouette_scores[k] = sil
                 inertias[k]          = km.inertia_
                 print(f"[ingestor]   k={k}: silhouette={sil:.3f}, "
@@ -1668,7 +1335,7 @@ class MKDataIngestor:
         else:
             # Stratified sample for silhouette + full data for inertia
             sample_size = min(SILHOUETTE_FULL_THRESHOLD, n)
-            idx_sample  = np.random.choice(n, sample_size, replace=False)
+            idx_sample  = np.random.RandomState(42).choice(n, sample_size, replace=False)
             X_sample    = features[idx_sample]
 
             print(f"[ingestor]   Auto-k: silhouette on sample (n={sample_size:,}) "
@@ -1679,7 +1346,8 @@ class MKDataIngestor:
                 km_s   = KMeans(n_clusters=k, random_state=42, n_init=10)
                 lbl_s  = km_s.fit_predict(X_sample)
                 sil    = silhouette_score(X_sample, lbl_s,
-                                          sample_size=min(sample_size, 5000))
+                                          sample_size=min(sample_size, 5000),
+                                          random_state=42)
                 silhouette_scores[k] = sil
 
                 # Inertia on full data
