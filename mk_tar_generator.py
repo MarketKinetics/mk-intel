@@ -227,9 +227,11 @@ class MKTARGenerator:
         sections["header"] = self._build_header(candidate, profile)
 
         # Section 1 — Effectiveness (gate check)
+        # temperature=0 — gate decision must be deterministic across identical inputs
         eff, usage = self._call(
             client, self._prompt_effectiveness(ctx, candidate),
-            f"tar_eff_{candidate.tar_id}", log_api_usage, max_tokens=3000
+            f"tar_eff_{candidate.tar_id}", log_api_usage,
+            max_tokens=3000, temperature=0
         )
         sections["effectiveness"] = eff
         total_in  += usage[0]
@@ -436,12 +438,14 @@ Direction  : {candidate.sobj_direction}"""
         log_key: str,
         log_api_usage,
         max_tokens: int = 2000,
+        temperature: float = 1.0,
     ) -> tuple[dict, tuple[int, int]]:
         """Single LLM call — parse JSON response, return (result, (in, out))."""
         response = client.messages.create(
-            model      = "claude-haiku-4-5-20251001",
-            max_tokens = max_tokens,
-            messages   = [{"role": "user", "content": prompt}],
+            model       = "claude-haiku-4-5-20251001",
+            max_tokens  = max_tokens,
+            temperature = temperature,
+            messages    = [{"role": "user", "content": prompt}],
         )
         log_api_usage(response, log_key, self.session)
         result = self._parse_json(response.content[0].text)
