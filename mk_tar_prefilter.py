@@ -664,7 +664,7 @@ Current profile:
 
 Return a JSON object with these refined fields:
 {{
-    "company_specific_name": "3-6 word name describing this audience segment's behavioral role in the context of this specific company and campaign objective. Must be professional, specific, and action-oriented. Reflect what this audience DOES relative to the business goal — not just who they are demographically. IMPORTANT: if multiple segments share the same demographic archetype, you MUST differentiate the name using behavioral signals from company data (e.g. churn risk level, LTV tier, MRR level, subscription plan, engagement pattern). Examples: 'High-Churn Premium Subscribers', 'Low-Spend High-Value Churners', 'At-Risk Power Users'.",
+    "company_specific_name": "3-6 word name describing this audience segment's behavioral role in the context of this specific company and campaign objective. Must be professional, specific, and action-oriented. Reflect what this audience DOES relative to the business goal — not just who they are demographically. IMPORTANT: if multiple segments share the same demographic archetype OR similar behavioral signals, you MUST differentiate the name. First try behavioral signals (churn risk, LTV, MRR, engagement). If behavioral signals are also similar, use the locked structural fields (dominant_age_bin, dominant_sex_label, dominant_edu_tier) to differentiate. Examples: 'High-Churn Premium Subscribers', 'Mid-50s Male Low-Risk Renewers', 'Established Female Homeowner Subscribers'.",
     "psych_summary": "...",
     "media_summary": "...",
     "channel_implications": "...",
@@ -692,7 +692,7 @@ Current profile:
 
 Return a JSON object adjusting ONLY income-related content:
 {{
-    "company_specific_name": "3-6 word name describing this audience segment's behavioral role in the context of this specific company and campaign objective. Must be professional, specific, and action-oriented. Reflect what this audience DOES relative to the business goal. IMPORTANT: if multiple segments share the same demographic archetype, differentiate using behavioral signals (churn risk, LTV, MRR, subscription plan). Examples: 'High-Churn Low-Spend Segment', 'Low-Risk Premium Renewers'.",
+    "company_specific_name": "3-6 word name describing this audience segment's behavioral role in the context of this specific company and campaign objective. Must be professional, specific, and action-oriented. Reflect what this audience DOES relative to the business goal. IMPORTANT: if multiple segments share the same demographic archetype OR similar behavioral signals, differentiate first using behavioral signals (churn risk, LTV, MRR), then using locked structural fields (dominant_age_bin, dominant_sex_label, dominant_edu_tier) if needed. Examples: 'High-Churn Low-Spend Segment', 'Mid-50s Male Low-Risk Renewers'.",
     "psych_summary": "...",
     "motivational_drivers": ["...", "..."],
     "key_barriers": ["...", "..."],
@@ -725,7 +725,7 @@ Current profile:
 
 Return a JSON object adjusting ONLY cultural/media/psych content:
 {{
-    "company_specific_name": "3-6 word name describing this audience segment's behavioral role in the context of this specific company and campaign objective. Must be professional, specific, and action-oriented. Reflect what this audience DOES relative to the business goal. IMPORTANT: if multiple segments share the same demographic archetype, differentiate using behavioral signals (churn risk, LTV, MRR, subscription plan). Examples: 'Culturally-Distinct High-Churn Risk', 'Community-Driven Premium Renewers'.",
+    "company_specific_name": "3-6 word name describing this audience segment's behavioral role in the context of this specific company and campaign objective. Must be professional, specific, and action-oriented. Reflect what this audience DOES relative to the business goal. IMPORTANT: if multiple segments share the same demographic archetype OR similar behavioral signals, differentiate first using behavioral signals (churn risk, LTV, MRR), then using locked structural fields (dominant_age_bin, dominant_sex_label, dominant_edu_tier) if needed. Examples: 'Culturally-Distinct High-Churn Risk', 'Established Female Community Renewers'.",
     "psych_summary": "...",
     "media_summary": "...",
     "channel_implications": "...",
