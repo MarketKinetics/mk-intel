@@ -16,10 +16,11 @@ function s(val) {
 }
 
 const CONFIDENCE_LABELS = {
-  A: 'Full census alignment — high confidence',
-  B1: 'Income divergence — income descriptors adjusted',
-  B2: 'Race divergence — cultural layer adjusted',
-  C: 'Full conflict — custom archetype, confidence penalty applied',
+  A:   'Full census alignment — high confidence',
+  B1:  'Income divergence — income descriptors adjusted',
+  B2:  'Race divergence — cultural layer adjusted',
+  C:   'Full conflict — custom archetype, confidence penalty applied',
+  BEH: 'Behavioral profile — no demographic baseline',
 }
 
 const DIM_KEYS = ['effectiveness', 'susceptibility', 'vulnerability', 'accessibility']
@@ -124,6 +125,11 @@ function TARCard({ tar, ranking, sessionId, sobjStatement }) {
                 </span>
               )}
               {rank === 1 && <span className="text-xs bg-teal-dark text-white px-2 py-0.5 rounded-full font-medium">First priority</span>}
+              {(tar.ta_id?.includes('_BEH') || tarData?.confidence_case === 'BEH') && (
+                <span className="text-xs bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded-full font-medium">
+                  Behavioral profile
+                </span>
+              )}
             </div>
             <div className="text-base font-medium text-ink mb-1">{audienceName}</div>
             <div className="text-xs text-slate">{sobjStatement || tar.sobj_id}</div>
@@ -360,34 +366,38 @@ export function SessionDetail() {
               <h1 className="text-2xl sm:text-3xl font-medium text-white/95 tracking-tight mb-2">{data?.company_name || 'Your analysis'}</h1>
               <p className="text-sm text-white/45">Live analysis · {tars.length} reports generated</p>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="flex gap-6">
-                {[
-                  { val: tars.length, label: 'reports' },
-                  { val: sobjs.length, label: 'objectives' },
-                ].map(m => (
-                  <div key={m.label} className="text-center">
-                    <div className="text-xl font-medium text-white/90">{m.val}</div>
-                    <div className="text-xs text-white/40">{m.label}</div>
-                  </div>
-                ))}
-              </div>
-              <a
-                href={`${import.meta.env.VITE_API_URL || 'https://web-production-7ec13.up.railway.app'}/sessions/${sessionId}/export`}
-                download
-                className="flex items-center gap-1.5 text-xs font-medium bg-teal-dark text-white px-3 py-1.5 rounded-lg hover:opacity-90 transition-opacity">
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                  <path d="M6.5 1v7M3.5 5l3 3 3-3M1 10h11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                Download data
-              </a>
+            <div className="flex gap-6">
+              {[
+                { val: tars.length, label: 'reports' },
+                { val: sobjs.length, label: 'objectives' },
+              ].map(m => (
+                <div key={m.label} className="text-center">
+                  <div className="text-xl font-medium text-white/90">{m.val}</div>
+                  <div className="text-xs text-white/40">{m.label}</div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       </div>
 
       <div className="max-w-4xl mx-auto px-6 py-8">
-        {sobjs.length > 1 && (
+        {data?.analysis_mode === 'behavioral' && (
+          <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="flex-shrink-0 mt-0.5">
+              <circle cx="8" cy="8" r="7" stroke="#3B82F6" strokeWidth="1.3"/>
+              <path d="M8 5v4M8 11v0.5" stroke="#3B82F6" strokeWidth="1.3" strokeLinecap="round"/>
+            </svg>
+            <div>
+              <div className="text-xs font-medium text-blue-700 mb-0.5">Behavioral profile mode</div>
+              <p className="text-xs text-blue-600 leading-relaxed">
+                This analysis ran without a demographic baseline — age, income, and census data were not available in this dataset.
+                Audience profiles and psychographic signals are inferred from behavioral patterns only.
+                Treat these reports as directional intelligence rather than population-validated insight.
+              </p>
+            </div>
+          </div>
+        )}
           <div className="flex gap-2 mb-6 flex-wrap">
             {sobjs.map(sobjId => {
               const label = sobjStatements[sobjId] || sobjId
