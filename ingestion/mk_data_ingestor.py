@@ -262,11 +262,16 @@ class MKDataIngestor:
         df_raw = read_file(file_path)
 
         # ── Save raw copy ─────────────────────────────────────────────────────
+        # ── Save raw copy ─────────────────────────────────────────────────────
         self.raw_dir.mkdir(parents=True, exist_ok=True)
         raw_dest = self.raw_dir / file_path.name
-        shutil.copy2(file_path, raw_dest)
-        print(f"[ingestor] Raw file saved to: {raw_dest}")
-
+        
+        # Only copy if source and destination are different files
+        if not file_path.samefile(raw_dest):
+            shutil.copy2(file_path, raw_dest)
+            print(f"[ingestor] Raw file saved to: {raw_dest}")
+        else:
+            print(f"[ingestor] Raw file already exists at: {raw_dest}")
         # ── Normalize ─────────────────────────────────────────────────────────
         try:
             from normalizer import normalize
