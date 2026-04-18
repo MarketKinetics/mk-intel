@@ -827,14 +827,15 @@ class MKDataIngestor:
             return self._bta_baseline
 
         # Search for BTA baseline relative to project root
-        project_root = Path(__file__).resolve().parents[2]
-        bta_path     = (
-            project_root
+        # Search for BTA baseline relative to project root
+        from backend.config import settings
+        bta_path = (
+            settings.project_root
             / "data"
             / "societal_processed"
             / "bta_cards"
             / BTA_BASELINE_FILENAME
-        )
+        )        )
 
         if not bta_path.exists():
             raise FileNotFoundError(
