@@ -161,11 +161,13 @@ class MKDataIngestor:
         company_data_root: Path,
         compliance_mode: str = "standard",
         sector: Optional[str] = None,
+        zcta_path: Optional[Path] = None,
     ):
         self.session          = session
         self.company_data_root = Path(company_data_root)
         self.compliance_mode  = compliance_mode
         self.sector           = sector
+        self.zcta_path        = Path(zcta_path) if zcta_path else None
 
         # Derive company slug and session directory
         company_name    = session.company.name if session.company else "unknown"
@@ -407,6 +409,17 @@ class MKDataIngestor:
         from sklearn.cluster import KMeans
         km = KMeans(n_clusters=k, random_state=42, n_init=10)
         labels = km.fit_predict(features)
+
+        # ── Sort cluster labels by size for deterministic ordering ────────────
+        # K-Means assigns arbitrary integer labels (0, 1, 2...) to clusters.
+        # Same centroids get different labels across runs. Sort by cluster size
+        # so CS00 is always the largest, CS01 second-largest, etc.
+        from collections import Counter
+        cluster_sizes = Counter(labels)
+        # Sort cluster IDs by descending size, then map old->new labels
+        size_order = sorted(cluster_sizes.keys(), key=lambda cid: -cluster_sizes[cid])
+        label_remap = {old_id: new_id for new_id, old_id in enumerate(size_order)}
+        labels = np.array([label_remap[old_id] for old_id in labels])
 
         # ── Build assignments DataFrame ───────────────────────────────────────
         self._df_cluster = self._df_norm[["customer_id"]].copy()
