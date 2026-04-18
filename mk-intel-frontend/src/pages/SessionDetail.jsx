@@ -387,6 +387,29 @@ export function SessionDetail() {
             </div>
           </div>
         )}
+        
+        {tars.length > 0 && currentRankings.length === 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
+            <div className="flex items-start gap-3">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="flex-shrink-0 mt-0.5">
+                <path d="M10 6v4m0 4h.01M10 18a8 8 0 100-16 8 8 0 000 16z" stroke="#D97706" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <div>
+                <div className="text-sm font-medium text-amber-800 mb-2">Objective-Data Mismatch</div>
+                <p className="text-sm text-amber-700 leading-relaxed mb-3">
+                  Your campaign objective doesn't align with your customer data. The analysis generated audience reports, 
+                  but none passed the effectiveness gate because your customers have already completed the target behavior 
+                  or cannot perform it.
+                </p>
+                <div className="text-xs text-amber-600">
+                  <span className="font-medium">Recommendation:</span> Revise your objective to match available customer behaviors, 
+                  filter your dataset to eligible customers only, or extend the completion timeframe.
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
         {sobjs.length > 1 && (
           <div className="flex gap-2 mb-6 flex-wrap">
             {sobjs.map(sobjId => {
