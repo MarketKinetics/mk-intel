@@ -92,7 +92,7 @@ _DEFAULT_JSONL = (
     / "mk_bta_rag_corpus.jsonl"
 )
  
-_CHROMA_PATH = _PROJECT_ROOT / "vector_db"
+_CHROMA_PATH = _PROJECT_ROOT / "data" / "vector_db"
  
 COLLECTION_NAME = "mk_baseline_segments"
  

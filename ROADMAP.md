@@ -311,6 +311,8 @@ Demo quota of 30,000 tokens covers approximately 1 full run comfortably.
 | API key policy | BYOK default + funded demo | Protects platform owner, enables demos |
 | Path resolution | Path().resolve().parent | No hardcoded absolute paths anywhere |
 | Segment store reload | force_reload on enrichment | BTAs never overwritten, TAs are session-scoped |
+| Behavioral-only mode trigger | bta_eligible_count == 0 | Binary decision at session level — no hybrid output, avoids false score equivalence |
+| Behavioral Tier 1 features | SOBJ-dynamic via SOBJ_SIGNAL_MAP | Reuses existing signal map, no new infrastructure, objective-aware |
 
 ### 6. Clustering Results Screen — Frontend Requirements
 
@@ -366,6 +368,93 @@ Override and reason logged to `cluster_stats.json` as auditable record.
 ### TO TRACK:
 if MK Intel expands to domains where behavioral data is predominantly categorical (e.g. survey response data, CRM tag data), revisit K-Prototypes or UMAP+HDBSCAN at that point.
 
+---
+
+### 7. Behavioral-Only Analysis Mode
+
+**Priority:** High — required for production readiness
+
+**Problem:**
+The current pipeline requires `age_bin` or `income_tier` for BTA matching (`structural_weight_coverage >= 0.35`). Many real B2C datasets — e-commerce platforms, mobile apps, loyalty programs — do not collect age or income at signup. Without these fields, 0 records are `bta_eligible` and the pipeline produces no output.
+
+**Decision: Binary mode detection, no hybrid output**
+
+A dataset either has demographic signals or it doesn't. Running a hybrid pipeline that mixes BTA-grounded and behavioral-only TARs in the same ranked list creates a false equivalence — the two types are not scored on the same evidence basis and cannot be meaningfully compared.
+
+The mode is determined once, at the session level, after ingestion:
+- `bta_eligible_count == 0` → **behavioral-only mode** for entire session
+- `bta_eligible_count > 0` → **standard BTA mode** (existing pipeline)
+
+The mode is stored on the session object as `analysis_mode: "bta" | "behavioral"`.
+
+**Trigger condition:**
+Detected at end of ingestion step in `mk_data_ingestor.py`, after coverage scoring. If all records have `bta_eligible = False`, session is flagged as behavioral mode before BTA matching runs. BTA matching step is skipped entirely.
+
+**Minimum viable data requirement:**
+At least 2 fields from the SOBJ-matched signal set must be present in the dataset. If not met, pipeline surfaces a clear error: "Insufficient behavioral signals to run analysis for this objective. Please verify your column mapping or choose a different objective."
+
+**Feature selection — SOBJ-dynamic Tier 1:**
+Rather than a static field ranking, Tier 1 features are dynamically inferred from the SOBJ statement using the existing `SOBJ_SIGNAL_MAP` in `mk_tar_prefilter.py`. Fields matched by the SOBJ keyword rules become Tier 1 for that session. All other behavioral fields become Tier 2/3.
+
+Examples:
+- SOBJ contains "churn" → `churn_risk_score`, `subscription_status`, `ltv`, `mrr` are Tier 1
+- SOBJ contains "upgrade" → `nps_score`, `feature_adoption_count`, `ltv` are Tier 1
+- SOBJ contains "email" → `email_open_rate`, `email_click_rate` are Tier 1
+
+This reuses existing logic with no new mapping infrastructure.
+
+**Clustering in behavioral mode:**
+Standard K-Means/K-Prototypes on available behavioral features. No BTA matching. No ZIP enrichment. All clusters receive a `confidence_case: "BEH"` flag.
+
+**Psychographic and media layer:**
+In BTA mode, the psychographic and media layer comes from the census-derived BTA card. In behavioral mode, there is no BTA card. The LLM generates a custom archetype from behavioral signals only — same mechanism as Case C (`_generate_name_for_case_c` in `mk_tar_prefilter.py`), extended to cover all clusters.
+
+TAR content will be sourced entirely from `company_data` and `llm_inference`. No `bta_baseline` claims will appear. The traceability section must explicitly note the absence of the population baseline layer.
+
+**Confidence case:**
+New confidence case `"BEH"` (behavioral-only) added alongside existing A / B1 / B2 / C cases.
+
+Internal value: `"BEH"`
+UI label: `"Behavioral profile"`
+UI description: `"This audience was identified from your customer data patterns. Population-level demographic baseline not available for this dataset."`
+Badge color: distinct from A/B/C cases — use neutral/blue rather than green/amber/red.
+
+**TAR generation:**
+Unchanged. The TAR generator receives the same candidate structure regardless of mode. The behavioral archetype profile replaces the BTA-enriched profile as the context document. All 8 TAR sections generate normally. Source tags will reflect `company_data` and `llm_inference` dominance.
+
+**Prefilter:**
+Unchanged. The prefilter already scores on behavioral signals regardless of BTA mode. The SOBJ signal rules work identically.
+
+**Scoring algorithm:**
+Unchanged. Scoring operates on TAR section outputs, not on the upstream profile type.
+
+**Frontend changes required:**
+- `SessionDetail.jsx` — show a notice banner when `analysis_mode == "behavioral"`: "This analysis ran in behavioral profile mode — demographic baseline not available for this dataset."
+- TAR cards — show "Behavioral profile" badge instead of confidence case badge (A / B1 / B2 / C)
+- Processing page — add a stage indicator note when behavioral mode is detected post-ingestion
+
+**Files to modify:**
+- `mk_data_ingestor.py` — detect mode after coverage scoring, set `session.analysis_mode`
+- `mk_intel_session.py` — add `analysis_mode` field to session model
+- `mk_tar_prefilter.py` — extend `_generate_name_for_case_c` to handle all behavioral clusters; set `confidence_case = "BEH"`
+- `mk_tar_generator.py` — handle `"BEH"` confidence case in `_build_profile_context`; suppress BTA-specific context fields gracefully
+- `coverage.py` — no changes needed; `bta_eligible` flag already computed correctly
+- `backend/routers/pipeline.py` — expose `analysis_mode` in session response
+- `backend/routers/sessions.py` — include `analysis_mode` in session metadata
+- `mk-intel-frontend/src/pages/SessionDetail.jsx` — behavioral mode banner + badge
+- `mk-intel-frontend/src/pages/Processing.jsx` — mode detection notice
+
+**Implementation estimate:** 2-3 focused days.
+
+**Known limitation:**
+Behavioral-only TARs will be less rich than BTA-grounded TARs. The psychographic layer, media behavior signals, and trust cues will be LLM-inferred rather than census-grounded. Analysts should treat behavioral-only output as directional intelligence, not population-validated insight. This limitation is surfaced explicitly in the TAR traceability section.
+
+**Test datasets:**
+- IBM Telco Customer Churn (Kaggle) — no age/income, 7,043 customers ✓ triggers behavioral mode
+- ShopFlow / E-Commerce Customer Churn (Kaggle, Ankit Verma) — no age/income, 5,630 customers ✓ triggers behavioral mode
+
+---
+
 
 ## Phase 7 — Performance and UX Optimization
 
@@ -415,3 +504,16 @@ if MK Intel expands to domains where behavioral data is predominantly categorica
 - If platform scales beyond demo: implement formal DPA template,
   GDPR subject access request flow, and data retention schedule.
 ---
+
+### to add in the README or document somewhere
+MK Intel in its current form is strictly B2C or prosumer — individuals as customers. B2B would require a completely different societal baseline built from business registries, industry data, company size distributions etc. That's a future product scope.
+
+MK Intel requires US-based customer data for BTA-grounded analysis. Non-US datasets or datasets without age/income fields will run in behavioral-only mode automatically.
+
+## Test datasets for platform validation
+The following public datasets are recommended for testing MK Intel:
+- **IBM Telco Customer Churn** — https://www.kaggle.com/datasets/blastchar/telco-customer-churn — B2C Telco, 7,043 customers, has ZIP codes (US), triggers standard BTA mode
+- **E-Commerce Customer Churn** (Ankit Verma) — https://www.kaggle.com/datasets/ankitverma2010/ecommerce-customer-churn-analysis-and-prediction — B2C e-commerce, 5,630 customers, no age/income, triggers behavioral-only mode
+- **GlobalCart** (synthetic, included) — E-commerce subscription, 50K customers, full demographic signals, standard BTA mode
+- **CloudSync** (synthetic, included) — B2B SaaS proxy, 1,500 customers with ZIP enrichment, standard BTA mode
+

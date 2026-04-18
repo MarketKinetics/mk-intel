@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional
 from backend.config import settings
 
-DB_PATH = settings.project_root / "vector_db" / "mk_intel.db"
+DB_PATH = settings.project_root / "data" / "mk_intel.db"
 
 
 def get_conn() -> sqlite3.Connection:

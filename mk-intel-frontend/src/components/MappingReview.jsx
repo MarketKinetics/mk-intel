@@ -10,10 +10,43 @@ const METHOD_CONFIG = {
   collision_loser:{ label: 'Collision',     bg: 'bg-orange-50', border: 'border-orange-200',text: 'text-orange-600' },
 }
 
-const TABS = [
+// Expected value format hints shown in the dropdown next to each canonical field
+const FIELD_TYPE_HINTS = {
+  customer_id: 'string', age: 'integer e.g. 34', age_bin: 'string e.g. 25-34',
+  gender: 'string e.g. Male/Female', income_annual: 'float e.g. 75000',
+  income_tier: 'string e.g. 50-99k', education: 'string e.g. Bachelor',
+  marital_status: 'string e.g. Married', housing_tenure: 'string e.g. Owner',
+  zip_code: 'string e.g. 90210', country: 'string e.g. US',
+  customer_since: 'date e.g. 2022-01-15',
+  sessions_last_7d: 'integer e.g. 3', sessions_last_30d: 'integer e.g. 12',
+  sessions_last_90d: 'integer e.g. 35', last_active_date: 'date e.g. 2024-03-01',
+  days_since_active: 'integer e.g. 14', feature_adoption_count: 'integer e.g. 5',
+  nps_score: 'integer 0-10', support_tickets_total: 'integer e.g. 2',
+  support_tickets_90d: 'integer e.g. 1', cancellation_attempts: 'integer e.g. 0',
+  subscription_plan: 'string e.g. Monthly/Annual', subscription_status: 'string e.g. active/cancelled',
+  mrr: 'float e.g. 49.99', arr: 'float e.g. 599.88', ltv: 'float e.g. 1200',
+  total_purchases: 'integer e.g. 24', purchases_last_30d: 'integer e.g. 3',
+  purchases_last_90d: 'integer e.g. 8', avg_order_value: 'float e.g. 45.50',
+  last_purchase_date: 'date e.g. 2024-03-10', days_since_purchase: 'integer e.g. 7',
+  payment_failures_total: 'integer e.g. 0', discount_usage_pct: 'float 0-1 e.g. 0.35',
+  cart_abandonment_rate: 'float 0-1 e.g. 0.20', return_rate: 'float 0-1 e.g. 0.05',
+  churn_risk_score: 'float 0-1 e.g. 0.72', churn_risk_tier: 'string e.g. high/medium/low',
+  days_to_renewal: 'integer e.g. 30', renewal_date: 'date e.g. 2024-06-01',
+  onboarding_completed: 'boolean true/false', onboarding_completion_pct: 'float 0-1 e.g. 0.80',
+  lifecycle_stage: 'string e.g. active/at_risk', upgrades_total: 'integer e.g. 1',
+  downgrades_total: 'integer e.g. 0', referrals_made: 'integer e.g. 2',
+  email_open_rate: 'float 0-1 e.g. 0.25', email_click_rate: 'float 0-1 e.g. 0.08',
+  push_opt_in: 'boolean true/false', sms_opt_in: 'boolean true/false',
+  preferred_channel: 'string e.g. email/mobile/sms', avg_review_score: 'float 1-5 e.g. 4.2',
+  nps_tier: 'string e.g. promoter/passive/detractor', sentiment_score: 'float -1 to 1',
+  pain_points: 'text or list', source_count: 'integer e.g. 3',
+}
+
+// Only show tabs that have fields — hide Confirmed tab by default (Fix 4)
+const ALL_TABS = [
   { id: 'review',    label: 'Needs review' },
-  { id: 'confirmed', label: 'Confirmed' },
   { id: 'skipped',   label: 'Unmatched / skipped' },
+  { id: 'confirmed', label: 'Confirmed' },
 ]
 
 function FieldRow({ col, info, samples, canonicalFields, onChange }) {
@@ -44,7 +77,7 @@ function FieldRow({ col, info, samples, canonicalFields, onChange }) {
             </div>
           )}
         </div>
-        <div className="flex-shrink-0 w-52">
+        <div className="flex-shrink-0 w-56">
           <div className="text-xs text-slate mb-1">Maps to</div>
           <select
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs text-ink focus:outline-none focus:border-teal-dark bg-white transition-colors"
@@ -52,7 +85,9 @@ function FieldRow({ col, info, samples, canonicalFields, onChange }) {
             onChange={e => onChange(col, e.target.value || null)}>
             <option value="">— Skip this field —</option>
             {canonicalFields.map(f => (
-              <option key={f} value={f}>{f}</option>
+              <option key={f} value={f}>
+                {f}{FIELD_TYPE_HINTS[f] ? ` · ${FIELD_TYPE_HINTS[f]}` : ''}
+              </option>
             ))}
           </select>
         </div>
@@ -180,21 +215,38 @@ export function MappingReview({ sessionId, onConfirm }) {
       </div>
 
       <div className="flex gap-1 border-b border-gray-200 mb-4">
-        {TABS.map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            className={`px-3 py-2 text-xs font-medium transition-all border-b-2 -mb-px
-              ${activeTab === tab.id
-                ? 'text-teal-dark border-teal-dark'
-                : 'text-slate border-transparent hover:text-ink'}`}>
-            {tab.label}
-            <span className="ml-1.5 bg-gray-100 text-slate px-1.5 py-0.5 rounded-full text-xs">
-              {tabCounts[tab.id]}
-            </span>
-          </button>
-        ))}
+        {ALL_TABS.map(tab => {
+          const count = tab.id === 'review' ? reviewFields.length
+            : tab.id === 'skipped' ? skippedFields.length
+            : confirmedFields.length
+          // Hide confirmed tab if it has no items that need attention
+          if (tab.id === 'confirmed' && reviewFields.length > 0 && activeTab !== 'confirmed') return null
+          return (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+              className={`px-3 py-2 text-xs font-medium transition-all border-b-2 -mb-px
+                ${activeTab === tab.id
+                  ? 'text-teal-dark border-teal-dark'
+                  : 'text-slate border-transparent hover:text-ink'}`}>
+              {tab.label}
+              <span className="ml-1.5 bg-gray-100 text-slate px-1.5 py-0.5 rounded-full text-xs">
+                {count}
+              </span>
+            </button>
+          )
+        })}
       </div>
 
       <div className="space-y-2 mb-6 max-h-80 overflow-y-auto pr-1">
+        {activeTab === 'review' && activeFields.length > 0 && (
+          <p className="text-xs text-slate italic mb-2">
+            These fields were mapped by AI — verify the mapping matches your data. The dropdown shows each field's expected format.
+          </p>
+        )}
+        {activeTab === 'skipped' && activeFields.length > 0 && (
+          <p className="text-xs text-slate italic mb-2">
+            These fields could not be mapped. If relevant, assign them manually using the dropdown.
+          </p>
+        )}
         {activeFields.length === 0 ? (
           <div className="text-xs text-slate text-center py-6">No fields in this category</div>
         ) : (

@@ -131,6 +131,7 @@ export function Processing() {
       setError(e.response?.data?.detail || 'Failed to start profiling.')
     }
   }
+  async function startGeneration() {
     clearInterval(pollerRef.current)
     setStageStatuses(s => ({ ...s, prefilter: 'done', generate: 'running' }))
     setCurrentStage('generate')
@@ -229,7 +230,7 @@ export function Processing() {
           <p className="text-sm text-white/45">
             {currentStage === 'done'
               ? 'Redirecting to your results...'
-              : 'This takes 3–5 minutes. You can keep this tab open.'}
+              : 'Analysis time varies by dataset size — feel free to leave this tab open.'}
           </p>
         </div>
       </div>
