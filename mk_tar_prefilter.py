@@ -756,6 +756,7 @@ Return ONLY the JSON object."""
         response = client.messages.create(
             model      = "claude-haiku-4-5-20251001",
             max_tokens = 1500,
+            temperature = 0,
             messages   = [{"role": "user", "content": prompt}],
         )
         log_api_usage(response, f"profile_refinement_case_{case}", self.session)
