@@ -1,28 +1,61 @@
-import React, { useState } from 'react';
-import { downloadSession } from '../utils/downloadSession';
+import React, { useState } from 'react'
+import { sessions as sessionsApi } from '../api/client'
 
-export default function DownloadButton({ sessionId, companyName }) {
-  const [downloading, setDownloading] = useState(false);
-  
+const DownloadButton = ({ sessionId, companyName }) => {
+  const [downloading, setDownloading] = useState(false)
+
   const handleDownload = async () => {
-    setDownloading(true);
-    await downloadSession(sessionId, companyName);
-    setTimeout(() => setDownloading(false), 2000);
-  };
+    try {
+      setDownloading(true)
+      
+      // Use the documented export API from handoff document
+      const response = await sessionsApi.export(sessionId)
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      
+      // Generate filename: CompanyName_SessionID.zip
+      const filename = `${(companyName || 'Analysis').replace(/[^a-zA-Z0-9]/g, '_')}_${sessionId.slice(0, 8)}.zip`
+      link.setAttribute('download', filename)
+      
+      // Trigger download
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      
+      // Cleanup
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Download failed:', error)
+      // Could add toast notification here
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   return (
     <button
       onClick={handleDownload}
       disabled={downloading}
-      style={{ backgroundColor: downloading ? '#6b7280' : '#059669' }}
-      className="inline-flex items-center gap-2 px-4 py-3 rounded-lg font-semibold text-sm text-white transition-all duration-200 hover:bg-emerald-700 hover:-translate-y-0.5 disabled:opacity-60"
+      className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-white/90 hover:text-white border border-white/20 hover:border-white/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-        <polyline points="7,10 12,15 17,10" />
-        <line x1="12" y1="15" x2="12" y2="3" />
-      </svg>
-      {downloading ? 'Preparing...' : 'Download Session'}
+      {downloading ? (
+        <>
+          <div className="w-3 h-3 border border-white/40 border-t-white/90 rounded-full animate-spin" />
+          Preparing...
+        </>
+      ) : (
+        <>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M7 1v8m0 0L4 6m3 3l3-3M1 12h12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Download
+        </>
+      )}
     </button>
-  );
+  )
 }
+
+export default DownloadButton

@@ -35,6 +35,8 @@ export const sessions = {
   getSummary: (id, tarId) => api.get(`/sessions/${id}/tars/${tarId}/summary`),
   getColumnMapping: (id) => api.get(`/sessions/${id}/column-mapping`),
   updateColumnMapping: (id, amendments) => api.patch(`/sessions/${id}/column-mapping`, { amendments }),
+  // RESTORED: Working export functionality from handoff document
+  export: (id) => api.get(`/sessions/${id}/export`, { responseType: 'blob' }),
 }
 
 export const examples = {
