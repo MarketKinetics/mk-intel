@@ -664,17 +664,38 @@ Current profile:
 
 Return a JSON object with these refined fields:
 {{
-    "company_specific_name": "3-6 word name describing this audience segment's behavioral role in the context of this specific company and campaign objective. Must be professional, specific, and action-oriented. Reflect what this audience DOES relative to the business goal — not just who they are demographically. ABSOLUTE UNIQUENESS REQUIREMENT: This segment MUST have a completely UNIQUE name different from ALL other segments in this entire analysis. Use this CASCADING DIFFERENTIATION SYSTEM in order: 
+    "company_specific_name": "3-6 word name combining this cluster's specific behavioral pattern with BTA demographic context. FORMULA: [Cluster Behavioral Trait] + [BTA Context] + [Role].
 
-LEVEL 1 - BEHAVIORAL: Start with engagement levels (High-Engagement vs Moderate-Engagement vs Low-Engagement), interaction frequency (Frequent vs Occasional vs Rare), activity style (Active vs Passive vs Selective), lifecycle stage (New vs Established vs Veteran).
+STEP 1 - ANALYZE CLUSTER BEHAVIORAL SIGNALS:
+Examine the behavioral_signals JSON data for this specific cluster:
+- sessions_last_30d_median: Engagement frequency pattern
+- days_since_active_median: Recency pattern  
+- mrr_median: Value tier pattern
+- Other behavioral signals that distinguish this cluster
 
-LEVEL 2 - BTA DEMOGRAPHIC: If behavioral patterns are similar, add BTA-specific demographic details like age cohort (Young-Adult vs Mid-Career vs Established vs Senior), household type (Single vs Family vs Empty-Nest), life stage (Early-Career vs Peak-Earning vs Pre-Retirement).
+STEP 2 - IDENTIFY CLUSTER BEHAVIORAL TRAIT:
+Based on behavioral analysis, select the most distinctive pattern:
+- High engagement (6+ sessions): 'High-Session', 'Frequent-Touch', 'Active-Engagement'
+- Moderate engagement (3-5 sessions): 'Moderate-Touch', 'Regular-Contact', 'Steady-Engagement'
+- Low engagement (1-2 sessions): 'Low-Touch', 'Occasional-Contact', 'Minimal-Engagement'
+- Recent activity (<10 days): 'Recent-Touch', 'Currently-Active', 'Fresh-Engagement'  
+- Older activity (20+ days): 'Dormant-Touch', 'Periodic-Contact', 'Episodic-Engagement'
+- High value (>$2300): 'Premium-Tier', 'High-Value', 'Top-Tier'
+- Standard value ($2000-2300): 'Standard-Tier', 'Mid-Value', 'Core-Tier'
 
-LEVEL 3 - PSYCHOGRAPHIC: If still similar, emphasize decision-making style (Analytical vs Intuitive vs Peer-Driven), risk tolerance (Conservative vs Moderate vs Adventurous), value orientation (Security-Focused vs Value-Seeking vs Status-Conscious).
+STEP 3 - COMBINE WITH BTA CONTEXT:
+Use BTA archetype demographic context: Mid-Career, Young-Adult, Established, Senior, etc.
 
-LEVEL 4 - MEDIA PREFERENCE: If still similar, use channel preferences (Digital-Native vs Traditional-Channel vs Mobile-First vs Multi-Platform).
+STEP 4 - ADD ROLE:
+Complete with role descriptor: Policy Holders, Subscribers, Customers, Members
 
-EXAMPLES: 'High-Engagement Young-Adult Subscribers', 'Moderate-Touch Mid-Career Analytical Users', 'Occasional-Contact Traditional-Channel Families', 'Peer-Driven Mobile-First Value-Seekers', 'Conservative Established Multi-Platform Users'. Each name MUST be completely unique using this cascade system.",
+EXAMPLES:
+- 'Recent-Touch Mid-Career Policy Holders' (recent activity + BTA + role)
+- 'High-Session Established Subscribers' (frequent engagement + BTA + role)  
+- 'Premium-Tier Young-Adult Customers' (high value + BTA + role)
+- 'Dormant-Touch Senior Members' (low recency + BTA + role)
+
+NAME MUST BE UNIQUE AND REFLECT ACTUAL CLUSTER BEHAVIORAL DIFFERENCES.",
     "psych_summary": "...",
     "media_summary": "...",
     "channel_implications": "...",
@@ -902,7 +923,7 @@ Use "llm_inference" framing for any claims not directly supported by the signals
 
 Return ONLY a JSON object with these fields:
 {{
-    "company_specific_name": "3-6 word name reflecting behavioral role for this company and campaign. Must be specific and action-oriented. ABSOLUTE UNIQUENESS REQUIREMENT: This segment MUST have a completely UNIQUE name using CASCADING DIFFERENTIATION SYSTEM: (1) Behavioral patterns first (High-Activity vs Moderate vs Low, Frequent vs Occasional vs Rare-Contact), (2) Engagement style if needed (Active vs Passive vs Selective, Self-Service vs Support-Seeking), (3) Value patterns if needed (High-Value vs Standard vs Budget, Premium vs Economy), (4) Interaction style if needed (Digital-First vs Traditional-Channel vs Mobile-Native vs Multi-Platform). Since there's no demographic baseline, focus heavily on behavioral intensity and interaction patterns. Examples: 'High-Activity Premium Digital-First Users', 'Moderate-Contact Traditional-Channel Budget Subscribers', 'Rare-Touch Self-Service Economy Customers', 'Frequent-Support Mobile-Native High-Value Clients'.",
+    "company_specific_name": "3-6 word name reflecting this cluster's behavioral role for this company and campaign. FORMULA: [Cluster Behavioral Trait] + [Engagement Style] + [Role]. Since there's no demographic baseline, focus on behavioral patterns: analyze sessions_last_30d_median, days_since_active_median, mrr_median and other behavioral signals. Use patterns like 'High-Activity' (6+ sessions), 'Recent-Touch' (<10 days active), 'Premium-Tier' (>$2300), 'Support-Seeking' (high tickets), 'Self-Service' (low tickets). Examples: 'High-Activity Premium Digital Users', 'Recent-Touch Self-Service Customers', 'Low-Touch Budget Economy Subscribers', 'Frequent-Support High-Value Clients'.",
     "psych_summary": "2-3 sentences describing likely psychological profile inferred from behavioral patterns. Frame as inference, not fact.",
     "media_summary": "1-2 sentences on likely media/channel preferences inferred from engagement signals.",
     "channel_implications": "1-2 sentences on best channels to reach this audience based on behavioral data.",
