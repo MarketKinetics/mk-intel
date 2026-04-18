@@ -820,6 +820,7 @@ Return ONLY a JSON object:
             response = client.messages.create(
                 model      = "claude-haiku-4-5-20251001",
                 max_tokens = 100,
+                temperature = 0,
                 messages   = [{"role": "user", "content": prompt}],
             )
             log_api_usage(response, "case_c_name_generation", self.session)
@@ -908,6 +909,7 @@ Return ONLY the JSON object."""
             response = client.messages.create(
                 model      = "claude-haiku-4-5-20251001",
                 max_tokens = 800,
+                temperature = 0,
                 messages   = [{"role": "user", "content": prompt}],
             )
             log_api_usage(response, "beh_profile_generation", self.session)
@@ -1067,6 +1069,7 @@ Return ONLY a JSON object:
         response = client.messages.create(
             model      = "claude-haiku-4-5-20251001",
             max_tokens = 200,
+            temperature = 0,
             messages   = [{"role": "user", "content": prompt}],
         )
         log_api_usage(response, "prefilter_llm_fallback", self.session)
