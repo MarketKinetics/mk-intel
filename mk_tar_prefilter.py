@@ -664,7 +664,7 @@ Current profile:
 
 Return a JSON object with these refined fields:
 {{
-    "company_specific_name": "3-6 word name describing this audience segment's behavioral role in the context of this specific company and campaign objective. Must be professional, specific, and action-oriented. Reflect what this audience DOES relative to the business goal — not just who they are demographically. IMPORTANT: if multiple segments share the same demographic archetype OR similar behavioral signals, you MUST differentiate the name. First try behavioral signals (churn risk, LTV, MRR, engagement). If behavioral signals are also similar, use the locked structural fields (dominant_age_bin, dominant_sex_label, dominant_edu_tier) to differentiate. Examples: 'High-Churn Premium Subscribers', 'Mid-50s Male Low-Risk Renewers', 'Established Female Homeowner Subscribers'.",
+    "company_specific_name": "3-6 word name describing this audience segment's behavioral role in the context of this specific company and campaign objective. Must be professional, specific, and action-oriented. Reflect what this audience DOES relative to the business goal — not just who they are demographically. CRITICAL UNIQUENESS REQUIREMENT: This segment MUST have a UNIQUE name that differentiates it from ALL other segments in this analysis. If multiple segments share the same demographic archetype (BTA_XX), you MUST create distinct names by emphasizing: (1) specific engagement levels (High-Engagement vs Moderate-Engagement vs Low-Engagement), (2) behavioral intensity (Frequent vs Occasional, Active vs Passive), (3) customer lifecycle stage (New vs Established vs Veteran), (4) value patterns (High-Value vs Standard vs Budget), (5) interaction style (Self-Service vs Agent-Assisted, Digital vs Traditional). Use the most distinguishing behavioral characteristic as the primary differentiator. Examples: 'High-Engagement Premium Subscribers', 'Moderate-Touch Value Seekers', 'Digital-First Frequent Renewers', 'Traditional-Channel Established Customers'.",
     "psych_summary": "...",
     "media_summary": "...",
     "channel_implications": "...",
@@ -692,7 +692,7 @@ Current profile:
 
 Return a JSON object adjusting ONLY income-related content:
 {{
-    "company_specific_name": "3-6 word name describing this audience segment's behavioral role in the context of this specific company and campaign objective. Must be professional, specific, and action-oriented. Reflect what this audience DOES relative to the business goal. IMPORTANT: if multiple segments share the same demographic archetype OR similar behavioral signals, differentiate first using behavioral signals (churn risk, LTV, MRR), then using locked structural fields (dominant_age_bin, dominant_sex_label, dominant_edu_tier) if needed. Examples: 'High-Churn Low-Spend Segment', 'Mid-50s Male Low-Risk Renewers'.",
+    "company_specific_name": "3-6 word name describing this audience segment's behavioral role in the context of this specific company and campaign objective. Must be professional, specific, and action-oriented. Reflect what this audience DOES relative to the business goal. CRITICAL UNIQUENESS REQUIREMENT: This segment MUST have a UNIQUE name different from all other segments. If multiple segments share the same demographic archetype, differentiate using engagement levels (High-Engagement vs Moderate-Engagement), behavioral patterns (Frequent vs Occasional), customer value (High-Value vs Standard), or interaction style (Digital vs Traditional). Examples: 'High-Engagement Low-Spend Segment', 'Traditional-Channel Value Seekers', 'Digital-First Budget Subscribers'.",
     "psych_summary": "...",
     "motivational_drivers": ["...", "..."],
     "key_barriers": ["...", "..."],
@@ -725,7 +725,7 @@ Current profile:
 
 Return a JSON object adjusting ONLY cultural/media/psych content:
 {{
-    "company_specific_name": "3-6 word name describing this audience segment's behavioral role in the context of this specific company and campaign objective. Must be professional, specific, and action-oriented. Reflect what this audience DOES relative to the business goal. IMPORTANT: if multiple segments share the same demographic archetype OR similar behavioral signals, differentiate first using behavioral signals (churn risk, LTV, MRR), then using locked structural fields (dominant_age_bin, dominant_sex_label, dominant_edu_tier) if needed. Examples: 'Culturally-Distinct High-Churn Risk', 'Established Female Community Renewers'.",
+    "company_specific_name": "3-6 word name describing this audience segment's behavioral role in the context of this specific company and campaign objective. Must be professional, specific, and action-oriented. Reflect what this audience DOES relative to the business goal. CRITICAL UNIQUENESS REQUIREMENT: This segment MUST have a UNIQUE name different from all other segments. If multiple segments share the same demographic archetype, differentiate using engagement levels (High-Engagement vs Moderate-Engagement), behavioral patterns (Active vs Passive), customer lifecycle (New vs Established), or interaction style (Digital vs Traditional). Examples: 'High-Engagement Community-Focused Renewers', 'Traditional-Channel Established Subscribers', 'Digital-First Cultural Connectors'.",
     "psych_summary": "...",
     "media_summary": "...",
     "channel_implications": "...",
@@ -804,7 +804,10 @@ Return ONLY the JSON object."""
 that describes this audience segment's behavioral role for this specific company and campaign.
 The name must be professional, specific, and action-oriented.
 Reflect what this audience DOES relative to the business goal — not just who they are demographically.
-Examples: "Mobile-First Value-Conscious Renewers", "High-LTV Passive Churn Risk", "Budget-Sensitive Upgrade Candidates"
+CRITICAL: This segment MUST have a UNIQUE name. If similar segments exist, differentiate using
+engagement levels (High-Engagement vs Moderate-Engagement), behavioral patterns (Active vs Passive),
+value characteristics (Premium vs Standard vs Budget), or interaction style (Digital vs Traditional).
+Examples: "Mobile-First Value-Conscious Renewers", "High-Touch Premium Subscribers", "Budget-Conscious Self-Service Users"
 
 Archetype base: {archetype}
 Behavioral signals: {json.dumps({k: v for k, v in list(behavioral.items())[:10]}, indent=2)}
@@ -812,7 +815,7 @@ Company context: {company_context[:400]}
 
 Return ONLY a JSON object:
 {{
-    "company_specific_name": "3-6 word audience name here"
+    "company_specific_name": "3-6 word unique audience name here"
 }}"""
 
         try:
@@ -880,7 +883,7 @@ Use "llm_inference" framing for any claims not directly supported by the signals
 
 Return ONLY a JSON object with these fields:
 {{
-    "company_specific_name": "3-6 word name reflecting behavioral role for this company and campaign. Must be specific and action-oriented. IMPORTANT: if multiple segments may share similar behavioral patterns, differentiate using signal levels (churn risk, LTV, MRR). Examples: 'High-Churn Low-Spend Customers', 'At-Risk High-Value Users', 'Low-Engagement Premium Subscribers'.",
+    "company_specific_name": "3-6 word name reflecting behavioral role for this company and campaign. Must be specific and action-oriented. CRITICAL UNIQUENESS REQUIREMENT: This segment MUST have a UNIQUE name different from all other segments in this analysis. If multiple segments may share similar behavioral patterns, differentiate using specific engagement levels (High-Engagement vs Moderate-Engagement vs Low-Engagement), behavioral intensity (Active vs Passive), value patterns (High-Value vs Standard vs Budget), or interaction style (Digital vs Traditional). Use the most distinguishing behavioral characteristic as the primary differentiator. Examples: 'High-Activity Low-Spend Customers', 'Moderate-Engagement Premium Users', 'Digital-First Budget Subscribers', 'Traditional-Touch High-Value Clients'.",
     "psych_summary": "2-3 sentences describing likely psychological profile inferred from behavioral patterns. Frame as inference, not fact.",
     "media_summary": "1-2 sentences on likely media/channel preferences inferred from engagement signals.",
     "channel_implications": "1-2 sentences on best channels to reach this audience based on behavioral data.",
