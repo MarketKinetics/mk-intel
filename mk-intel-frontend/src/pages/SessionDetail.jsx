@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { sessions as sessionsApi } from '../api/client'
-import DownloadButton from '../components/DownloadButton'
 
 function s(val) {
   if (val === null || val === undefined) return ''
@@ -364,7 +363,7 @@ export function SessionDetail() {
                   </div>
                 ))}
               </div>
-              <DownloadButton sessionId={sessionId} companyName={data?.company_name} />
+              {/* DownloadButton temporarily removed for testing */}
             </div>
           </div>
         </div>
