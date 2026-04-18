@@ -828,13 +828,14 @@ class MKDataIngestor:
 
         # Search for BTA baseline relative to project root
         # Search for BTA baseline relative to project root
-        from backend.config import settings
+        project_root = Path(__file__).resolve().parents[2]
         bta_path = (
-            settings.project_root
+            project_root
             / "data"
             / "societal_processed"
             / "bta_cards"
             / BTA_BASELINE_FILENAME
+        )            / BTA_BASELINE_FILENAME
         )        )
 
         if not bta_path.exists():
