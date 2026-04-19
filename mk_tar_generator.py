@@ -438,7 +438,7 @@ Direction  : {candidate.sobj_direction}"""
         log_key: str,
         log_api_usage,
         max_tokens: int = 2000,
-        temperature: float = 1.0,
+        temperature: float =0,
     ) -> tuple[dict, tuple[int, int]]:
         """Single LLM call — parse JSON response, return (result, (in, out))."""
         response = client.messages.create(
