@@ -184,6 +184,24 @@ SOBJ_SIGNAL_MAP: dict[str, list[dict]] = {
     ],
     "advocat":   "refer",
     "promot":    "refer",
+    # Acquire / enroll — add-on or new product acquisition from existing customers
+    # Signals: active status, reachability (low recency), existing payment relationship
+    # (mrr), engagement frequency. Covers insurance add-ons, SaaS feature upgrades,
+    # fitness packages, retail memberships — any pattern where an existing customer
+    # is asked to take on a new product, coverage, or service.
+    "acquir": [
+        {"field": "subscription_status_dominant","match": "active",            "weight": 0.30},
+        {"field": "days_since_active_median",    "direction": "lower_better",  "weight": 0.25},
+        {"field": "mrr_median",                  "direction": "higher_better", "weight": 0.25},
+        {"field": "sessions_last_30d_median",    "direction": "higher_better", "weight": 0.20},
+    ],
+    "enroll":    "acquir",
+    "sign up":   "acquir",
+    "purchas":   "acquir",
+    "subscrib":  "acquir",
+    "coverage":  "acquir",
+    "add-on":    "acquir",
+    "add on":    "acquir",
 }
 
 
@@ -209,6 +227,7 @@ FIELD_BOUNDS: dict[str, tuple[float, float]] = {
     "email_open_rate_mean":           (0.0, 1.0),
     "support_tickets_90d_median":     (0.0, 20.0),
     "total_purchases_median":         (0.0, 100.0),
+    "mrr_median":                     (0.0, 5000.0),
 }
 
 
