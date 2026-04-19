@@ -717,6 +717,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     <div class="rank">#{i} Priority &middot; {tar_id}</div>
     <h2>{audience_name}</h2>
     <div class="sobj">{sobj_statement}</div>
+    {'<div style="margin-top:10px;padding:8px 12px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:6px;color:#92400E;font-size:11px;"><strong>Not recommended:</strong> ' + _safe(tar.get("gate_fail_reason","Effectiveness rating below threshold.")) + '</div>' if not tar.get("gate_passed", True) else ''}
   </div>
   <div class="tar-body">
     <div class="meta-row">
@@ -832,7 +833,7 @@ def export_tars_html(session_id: str, sobj_id: str):
     tars = []
     for f in sorted(tars_dir.glob("*.json")):
         data = json.loads(f.read_text())
-        if data.get("sobj_id") == sobj_id and data.get("gate_passed"):
+        if data.get("sobj_id") == sobj_id:
             tars.append(data)
 
     if not tars:

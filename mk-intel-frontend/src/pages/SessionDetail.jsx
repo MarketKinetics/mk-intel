@@ -93,6 +93,22 @@ function TARCard({ tar, ranking, sessionId, sobjStatement }) {
   const score = ranking?.final_score ?? null
   const dims = ranking?.dimension_scores ?? {}
 
+  // For gate-failed TARs: derive display scores from TAR content
+  // since they are not in scored_rankings. Effectiveness and susceptibility
+  // ratings (1-5) are normalized to 0-1 for the radar chart.
+  function getDimsForDisplay(tarData) {
+    if (ranking?.dimension_scores) return ranking.dimension_scores
+    if (!tarData) return {}
+    const effRating = tarData.effectiveness?.rating
+    const suscRating = tarData.susceptibility?.rating
+    return {
+      effectiveness:  effRating  != null ? effRating  / 5 : 0,
+      susceptibility: suscRating != null ? suscRating / 5 : 0,
+      vulnerability:  0,
+      accessibility:  0,
+    }
+  }
+
   async function handleClick() {
     if (expanded) { setExpanded(false); return }
     if (tarData) { setExpanded(true); return }
@@ -126,6 +142,9 @@ function TARCard({ tar, ranking, sessionId, sobjStatement }) {
                 </span>
               )}
               {rank === 1 && <span className="text-xs bg-teal-dark text-white px-2 py-0.5 rounded-full font-medium">First priority</span>}
+              {tar.gate_passed === false && (
+                <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-medium">Not recommended</span>
+              )}
               {(tar.ta_id?.includes('_BEH') || tarData?.confidence_case === 'BEH') && (
                 <span className="text-xs bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded-full font-medium">
                   Behavioral profile
@@ -142,9 +161,9 @@ function TARCard({ tar, ranking, sessionId, sobjStatement }) {
             </svg>
           </div>
         </div>
-        {score && !expanded && rank && (
+        {(score || tarData) && !expanded && (
           <div className="mt-3 pt-3 border-t border-gray-100">
-            <RadarChart scores={dims} rank={rank} />
+            <RadarChart scores={getDimsForDisplay(tarData)} rank={rank ?? 99} />
           </div>
         )}
       </div>
@@ -174,7 +193,19 @@ function TARCard({ tar, ranking, sessionId, sobjStatement }) {
           <div className="p-5">
             {activeSection === 'scoring' && (
               <div className="space-y-4">
-                <RadarChart scores={dims} rank={rank} />
+                {!tarData.gate_passed && tarData.gate_fail_reason && (
+                  <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg p-3 mb-2">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="flex-shrink-0 mt-0.5">
+                      <path d="M7 1.5L12.5 11.5H1.5L7 1.5Z" stroke="#D97706" strokeWidth="1.2" strokeLinejoin="round"/>
+                      <path d="M7 5.5v3M7 10v0.5" stroke="#D97706" strokeWidth="1.2" strokeLinecap="round"/>
+                    </svg>
+                    <div>
+                      <div className="text-xs font-medium text-amber-800 mb-0.5">Not recommended for this campaign</div>
+                      <p className="text-xs text-amber-700 leading-relaxed">{tarData.gate_fail_reason}</p>
+                    </div>
+                  </div>
+                )}
+                <RadarChart scores={getDimsForDisplay(tarData)} rank={rank ?? 99} />
                 {tarData.effectiveness?.sobj_impact && (
                   <div>
                     <div className="text-xs font-medium text-slate uppercase tracking-widest mb-2">SOBJ impact</div>

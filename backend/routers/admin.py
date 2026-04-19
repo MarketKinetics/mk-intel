@@ -149,9 +149,8 @@ def _build_session_zip(session_id: str) -> io.BytesIO:
                     tars_by_sobj = {}
                     for f in sorted(tars_dir.glob("*.json")):
                         tar_data = json.loads(f.read_text())
-                        if tar_data.get("gate_passed"):
-                            sobj_id = tar_data.get("sobj_id", "SOBJ-01")
-                            tars_by_sobj.setdefault(sobj_id, []).append(tar_data)
+                        sobj_id = tar_data.get("sobj_id", "SOBJ-01")
+                        tars_by_sobj.setdefault(sobj_id, []).append(tar_data)
 
                     # Render and add one HTML per SOBJ
                     meta = _load_session_meta(session_id)
