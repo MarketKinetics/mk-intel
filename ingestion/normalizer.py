@@ -592,21 +592,22 @@ def _llm_mapping(
     canonical_list = sorted(CANONICAL_FIELDS)
 
     prompt = f"""You are a data schema mapping assistant for a marketing intelligence platform.
-
 Your task is to map company data column names to canonical schema field names.
+
+CRITICAL: Use deterministic reasoning. For ambiguous mappings, apply these preferences:
+- Time periods: prefer 30d over 90d over 7d (e.g. sessions_last_30d over sessions_last_90d)
+- Support tickets: prefer support_tickets_90d over support_tickets_total  
+- Income: prefer income_annual over income_tier (raw over binned)
 
 ## Canonical schema fields available:
 {json.dumps(canonical_list, indent=2)}
-
 ## Columns to map (with sample values):
 {json.dumps(col_samples, indent=2)}
-
 ## Instructions:
 - For each column, identify the best matching canonical field name from the list above.
 - If you are not confident (similarity < 70%), return null for that column.
 - Return ONLY a JSON object mapping each column name to its canonical field (or null).
 - Do not include any explanation, preamble, or markdown.
-
 Example output format:
 {{
   "CustomerAge": "age",
@@ -619,6 +620,7 @@ Example output format:
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=1000,
+            temperature=0,
             messages=[{"role": "user", "content": prompt}]
         )
         log_api_usage(response, "column_mapping_inference", session)
