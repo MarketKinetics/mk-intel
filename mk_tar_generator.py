@@ -247,13 +247,9 @@ class MKTARGenerator:
         ) if not gate_passed else None
 
         if not gate_passed:
-            print(f"[tar_generator]   GATE FAILED: {gate_fail_reason}")
-            return self._make_doc(
-                candidate, sections, False, gate_fail_reason,
-                total_in, total_out
-            )
-
-        print(f"[tar_generator]   Gate passed (rating={eff.get('rating', '?')}/5)")
+            print(f"[tar_generator]   GATE WARNING: {gate_fail_reason} — continuing full generation")
+        else:
+            print(f"[tar_generator]   Gate passed (rating={eff.get('rating', '?')}/5)")
 
         # Section 2 — Conditions
         cond, usage = self._call(
@@ -324,7 +320,7 @@ class MKTARGenerator:
 
         print(f"[tar_generator]   Tokens: {total_in} in / {total_out} out")
 
-        return self._make_doc(candidate, sections, True, None, total_in, total_out)
+        return self._make_doc(candidate, sections, gate_passed, gate_fail_reason, total_in, total_out)
 
 
     # ── Context builder ───────────────────────────────────────────────────────
