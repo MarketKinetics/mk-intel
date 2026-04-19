@@ -666,6 +666,13 @@ Return a JSON object with these refined fields:
 {{
     "company_specific_name": "3-6 word name combining this cluster's specific behavioral pattern with BTA demographic context. FORMULA: [Cluster Behavioral Trait] + [BTA Context] + [Role].
 
+CRITICAL RACE-BLIND REQUIREMENT: NEVER include race, ethnicity, cultural identity, or national origin markers in names. Focus ONLY on:
+- Behavioral patterns (High-Touch, Recent-Contact, Frequent-Session)
+- Age/lifecycle stages (Young-Adult, Mid-Career, Established, Senior)
+- Household types (Single, Family, Empty-Nest)
+- Engagement levels (Active, Moderate, Occasional)
+- Value tiers (Premium, Standard, Budget)
+
 STEP 1 - ANALYZE CLUSTER BEHAVIORAL SIGNALS:
 Examine the behavioral_signals JSON data for this specific cluster:
 - sessions_last_30d_median: Engagement frequency pattern
@@ -683,19 +690,19 @@ Based on behavioral analysis, select the most distinctive pattern:
 - High value (>$2300): 'Premium-Tier', 'High-Value', 'Top-Tier'
 - Standard value ($2000-2300): 'Standard-Tier', 'Mid-Value', 'Core-Tier'
 
-STEP 3 - COMBINE WITH BTA CONTEXT:
-Use BTA archetype demographic context: Mid-Career, Young-Adult, Established, Senior, etc.
+STEP 3 - COMBINE WITH BTA CONTEXT (RACE-BLIND):
+Use ONLY age/lifecycle demographic context: Mid-Career, Young-Adult, Established, Senior, Early-Career, Peak-Earning, Pre-Retirement. NEVER use racial, ethnic, or cultural descriptors.
 
 STEP 4 - ADD ROLE:
 Complete with role descriptor: Policy Holders, Subscribers, Customers, Members
 
 EXAMPLES:
-- 'Recent-Touch Mid-Career Policy Holders' (recent activity + BTA + role)
-- 'High-Session Established Subscribers' (frequent engagement + BTA + role)  
-- 'Premium-Tier Young-Adult Customers' (high value + BTA + role)
-- 'Dormant-Touch Senior Members' (low recency + BTA + role)
+- 'Recent-Touch Mid-Career Policy Holders' (recent activity + lifecycle + role)
+- 'High-Session Established Subscribers' (frequent engagement + lifecycle + role)  
+- 'Premium-Tier Young-Adult Customers' (high value + lifecycle + role)
+- 'Dormant-Touch Senior Members' (low recency + lifecycle + role)
 
-NAME MUST BE UNIQUE AND REFLECT ACTUAL CLUSTER BEHAVIORAL DIFFERENCES.",
+NAME MUST BE RACE-BLIND AND REFLECT ACTUAL CLUSTER BEHAVIORAL DIFFERENCES.",
     "psych_summary": "...",
     "media_summary": "...",
     "channel_implications": "...",
@@ -836,15 +843,20 @@ that describes this audience segment's behavioral role for this specific company
 The name must be professional, specific, and action-oriented.
 Reflect what this audience DOES relative to the business goal — not just who they are demographically.
 
-ABSOLUTE UNIQUENESS REQUIREMENT: This segment MUST have a completely UNIQUE name using 
-CASCADING DIFFERENTIATION SYSTEM in order:
-1. BEHAVIORAL: engagement levels (High-Engagement vs Moderate vs Low), interaction frequency 
-   (Frequent vs Occasional vs Rare), activity style (Active vs Passive vs Selective)
-2. DEMOGRAPHIC: age cohort (Young-Adult vs Mid-Career vs Established), household type 
-   (Single vs Family vs Empty-Nest), life stage markers if applicable
+CRITICAL RACE-BLIND REQUIREMENT: NEVER include race, ethnicity, cultural identity, or national origin markers in names. Focus ONLY on:
+- Behavioral patterns (High-Engagement, Moderate-Touch, Active)
+- Age/lifecycle stages (Young-Adult, Mid-Career, Established, Senior)
+- Household types (Single, Family, Empty-Nest) 
+- Engagement levels (Frequent, Occasional, Selective)
+- Value tiers (Premium, Standard, Budget)
+- Interaction styles (Digital-Native, Traditional-Channel, Mobile-First)
+
+DIFFERENTIATION SYSTEM:
+1. BEHAVIORAL: engagement levels, interaction frequency, activity style
+2. LIFECYCLE: age cohort (Young-Adult vs Mid-Career vs Established), household type
 3. PSYCHOGRAPHIC: decision-making style (Analytical vs Intuitive vs Peer-Driven), 
-   risk tolerance (Conservative vs Moderate), value orientation (Security vs Value vs Status)
-4. MEDIA PREFERENCE: channel preferences (Digital-Native vs Traditional-Channel vs Mobile-First)
+   risk tolerance (Conservative vs Moderate), value orientation (Security vs Value)
+4. MEDIA PREFERENCE: channel preferences (Digital-Native vs Traditional-Channel)
 
 Examples: "High-Engagement Young-Adult Mobile Users", "Moderate-Touch Mid-Career Analytical Families", 
 "Low-Contact Conservative Traditional-Channel Users", "Frequent-Interactive Digital-Native Value-Seekers"
@@ -855,7 +867,7 @@ Company context: {company_context[:400]}
 
 Return ONLY a JSON object:
 {{
-    "company_specific_name": "3-6 word completely unique audience name here"
+    "company_specific_name": "3-6 word race-blind unique audience name here"
 }}"""
 
         try:
@@ -923,7 +935,11 @@ Use "llm_inference" framing for any claims not directly supported by the signals
 
 Return ONLY a JSON object with these fields:
 {{
-    "company_specific_name": "3-6 word name reflecting this cluster's behavioral role for this company and campaign. FORMULA: [Cluster Behavioral Trait] + [Engagement Style] + [Role]. Since there's no demographic baseline, focus on behavioral patterns: analyze sessions_last_30d_median, days_since_active_median, mrr_median and other behavioral signals. Use patterns like 'High-Activity' (6+ sessions), 'Recent-Touch' (<10 days active), 'Premium-Tier' (>$2300), 'Support-Seeking' (high tickets), 'Self-Service' (low tickets). Examples: 'High-Activity Premium Digital Users', 'Recent-Touch Self-Service Customers', 'Low-Touch Budget Economy Subscribers', 'Frequent-Support High-Value Clients'.",
+    "company_specific_name": "3-6 word name reflecting this cluster's behavioral role for this company and campaign. FORMULA: [Cluster Behavioral Trait] + [Engagement Style] + [Role]. 
+
+CRITICAL RACE-BLIND REQUIREMENT: NEVER include race, ethnicity, cultural identity, or national origin markers in names. Focus ONLY on behavioral patterns, engagement levels, value tiers, and interaction styles.
+
+Since there's no demographic baseline, focus on behavioral patterns: analyze sessions_last_30d_median, days_since_active_median, mrr_median and other behavioral signals. Use patterns like 'High-Activity' (6+ sessions), 'Recent-Touch' (<10 days active), 'Premium-Tier' (>$2300), 'Support-Seeking' (high tickets), 'Self-Service' (low tickets). Examples: 'High-Activity Premium Digital Users', 'Recent-Touch Self-Service Customers', 'Low-Touch Budget Economy Subscribers', 'Frequent-Support High-Value Clients'.",
     "psych_summary": "2-3 sentences describing likely psychological profile inferred from behavioral patterns. Frame as inference, not fact.",
     "media_summary": "1-2 sentences on likely media/channel preferences inferred from engagement signals.",
     "channel_implications": "1-2 sentences on best channels to reach this audience based on behavioral data.",
