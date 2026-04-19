@@ -390,6 +390,11 @@ class MKTARGenerator:
         Case B2 — race diverges    : LLM adjusts cultural/media/psych layer only
         Case C — full conflict     : skip refinement, pass through as-is
 
+        After individual refinement, a BTA-group name resolution pass ensures
+        that clusters sharing the same BTA always receive distinct audience names.
+        The LLM sees all siblings simultaneously and names them relative to each
+        other — solving the collision problem structurally.
+
         Returns list of RefinedTAProfile objects.
         """
         print(f"[tar_generator] Stage 1: Profile refinement...")
@@ -446,6 +451,12 @@ class MKTARGenerator:
                 rp = self._refine_with_llm(card, case, company_context)
 
             refined.append(rp)
+
+        # ── BTA-group name resolution ─────────────────────────────────────────
+        # After individual refinement, resolve any name collisions within BTA
+        # groups by re-naming siblings together in a single LLM call where all
+        # sibling behavioral signals are visible simultaneously.
+        self._resolve_bta_group_names(refined, company_context)
 
         print(f"[tar_generator] Stage 1 complete — case distribution: {case_counts}")
         return refined
@@ -960,6 +971,120 @@ Return ONLY the JSON object."""
         except Exception as e:
             print(f"[tar_generator] ⚠ BEH profile generation failed: {e}")
             return fallback_name, fallback_profile
+
+
+    def _resolve_bta_group_names(
+        self,
+        refined:         list,
+        company_context: str,
+    ) -> None:
+        """
+        Post-refinement pass: resolve audience name collisions within BTA groups.
+
+        Groups refined profiles by source_bta_id (or cluster_id for BEH).
+        For any group where two or more profiles share the same company_specific_name,
+        fires one LLM call with all sibling profiles visible simultaneously so the
+        model can produce meaningfully distinct names in relative context.
+
+        Mutates company_specific_name in-place on the affected RefinedTAProfile
+        objects. All other refined fields are untouched.
+        """
+        try:
+            from utils import get_client, log_api_usage
+        except ImportError:
+            from mk_intel.ingestion.utils import get_client, log_api_usage
+
+        # Group profiles by BTA (or cluster for BEH)
+        groups: dict[str, list] = {}
+        for rp in refined:
+            if rp.refinement_case == "BEH":
+                key = f"BEH_cluster_{rp.profile.get('cluster_id', rp.ta_id)}"
+            else:
+                key = rp.profile.get("source_bta_id") or rp.ta_id
+            groups.setdefault(key, []).append(rp)
+
+        for bta_key, group in groups.items():
+            if len(group) < 2:
+                continue  # no collision possible
+
+            # Check for name collisions in this group
+            names = [rp.profile.get("company_specific_name", "") for rp in group]
+            if len(set(names)) == len(names):
+                continue  # all names already distinct
+
+            print(f"[tar_generator]   ⚠ Name collision in {bta_key} "
+                  f"({len(group)} clusters) — resolving with group prompt...")
+
+            # Build sibling context for the prompt
+            siblings = []
+            for rp in group:
+                behavioral = {
+                    k: v for k, v in rp.profile.get("behavioral_signals", {}).items()
+                    if v is not None and not any(excl in k for excl in self._excluded_signals)
+                }
+                siblings.append({
+                    "ta_id":          rp.ta_id,
+                    "current_name":   rp.profile.get("company_specific_name", ""),
+                    "archetype":      rp.profile.get("archetype_name", ""),
+                    "structural":     rp.profile.get("structural_profile", ""),
+                    "behavioral":     {k: v for k, v in list(behavioral.items())[:12]},
+                })
+
+            prompt = f"""These audience segments all belong to the same population archetype ({bta_key}).
+They were identified as distinct customer clusters in the company's data, meaning they
+represent genuinely different behavioral segments even though they share demographic characteristics.
+
+Your task: assign each cluster a unique 3-6 word audience name that captures what makes
+it behaviorally distinct from its siblings. You must name all clusters together so you can
+differentiate them relative to each other.
+
+CRITICAL RACE-BLIND REQUIREMENT: NEVER include race, ethnicity, cultural identity, or
+national origin markers in any name.
+
+NAMING RULES:
+- Names must be distinct from each other — no two clusters can share the same name
+- Derive each name from what genuinely differentiates that cluster's behavioral signals
+  from the others in this group (look at sessions, recency, value, support patterns etc.)
+- Use age/lifecycle from the BTA archetype context (Mid-Career, Established, Senior etc.)
+- Derive the role descriptor from company context (Members, Subscribers, Customers,
+  Policyholders, Users, Clients etc.)
+- Names must be meaningful to a marketing professional — not just "Cluster A" vs "Cluster B"
+
+Company context:
+{company_context[:400]}
+
+Clusters to name:
+{json.dumps(siblings, indent=2)}
+
+Return ONLY a JSON object mapping ta_id to its unique name:
+{{
+{chr(10).join(f'    "{s["ta_id"]}": "unique name for this cluster",' for s in siblings)}
+}}"""
+
+            try:
+                client   = get_client(self.session)
+                response = client.messages.create(
+                    model      = "claude-haiku-4-5-20251001",
+                    max_tokens = 300,
+                    temperature = 0,
+                    messages   = [{"role": "user", "content": prompt}],
+                )
+                log_api_usage(response, f"bta_group_name_resolution_{bta_key}", self.session)
+                raw    = response.content[0].text.strip().replace("```json", "").replace("```", "").strip()
+                result = json.loads(raw)
+
+                # Apply resolved names — mutate in place
+                for rp in group:
+                    new_name = result.get(rp.ta_id, "").strip()
+                    if new_name:
+                        rp.profile["company_specific_name"] = new_name
+                        rp.refined_fields["company_specific_name"] = new_name
+                        print(f"[tar_generator]     {rp.ta_id} → '{new_name}'")
+                    else:
+                        print(f"[tar_generator]     {rp.ta_id} → no name returned, keeping original")
+
+            except Exception as e:
+                print(f"[tar_generator]   ⚠ Group name resolution failed for {bta_key}: {e} — keeping original names")
 
 
     def _match_sobj_to_rules(
