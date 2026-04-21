@@ -1015,9 +1015,6 @@ def tar_to_ta_input(doc: TARDocument):
             SOBJDirection, AlignmentDirection,
         )
 
-    if not doc.gate_passed:
-        return None
-
     eff  = doc.sections.get("effectiveness", {})
     susc = doc.sections.get("susceptibility", {})
     vuln = doc.sections.get("vulnerabilities", {})
