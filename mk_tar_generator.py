@@ -237,13 +237,48 @@ class MKTARGenerator:
         total_in  += usage[0]
         total_out += usage[1]
 
-        # Gate pass is deterministic — never trust LLM to apply threshold correctly
-        rating           = int(eff.get("rating", 0))
+        # ── Deterministic effectiveness rating ───────────────────────────────
+        # Replace the LLM-generated rating with a formula computed from the
+        # structured fields the LLM already generates deterministically:
+        # decision_rights_score (0-3), resource_access_score (0-2), and
+        # restriction severity counts. The original LLM rating is preserved
+        # as llm_rating for transparency and logging.
+        _apc = eff.get("authority_power_control", {})
+        _decision  = int(_apc.get("decision_rights_score", 1))
+        _resource  = int(_apc.get("resource_access_score", 1))
+        _high_restr = len([r for r in eff.get("restrictions", [])
+                           if r.get("severity") == "high"
+                           and r.get("inhibits_behavior", True)])
+        _med_restr  = len([r for r in eff.get("restrictions", [])
+                           if r.get("severity") == "medium"
+                           and r.get("inhibits_behavior", True)])
+
+        # Base score: normalize combined authority + resource to 0-5 scale
+        _base    = ((_decision / 3.0) + (_resource / 2.0)) / 2.0 * 5.0
+        # Penalty: each high-severity restriction costs 0.75, medium costs 0.25
+        _penalty = (_high_restr * 0.75) + (_med_restr * 0.25)
+        _computed_rating = max(1, min(5, round(_base - _penalty)))
+
+        eff["llm_rating"]      = eff.get("rating")   # preserve for transparency
+        eff["rating"]          = _computed_rating     # override with deterministic value
+        eff["rating_formula"]  = {
+            "decision_rights_score": _decision,
+            "resource_access_score": _resource,
+            "high_severity_restrictions": _high_restr,
+            "medium_severity_restrictions": _med_restr,
+            "base": round(_base, 3),
+            "penalty": round(_penalty, 3),
+            "computed_rating": _computed_rating,
+        }
+
+        # Gate pass is now fully deterministic
+        rating           = _computed_rating
         gate_passed      = rating > 2
         eff["gate_pass"] = gate_passed
         gate_fail_reason = (
-            eff.get("gate_fail_reason") or
-            f"Effectiveness rating {rating}/5 is below threshold (>2 required)."
+            f"Rating of {rating} meets disqualification threshold (rating <= 2). "
+            f"Authority score {_decision}/3, resource score {_resource}/2, "
+            f"{_high_restr} high-severity restriction(s)."
         ) if not gate_passed else None
 
         if not gate_passed:

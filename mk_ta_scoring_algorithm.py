@@ -427,9 +427,35 @@ class TAScore:
 
 
 def score_ta(ta: TAInput, weights: ScoringWeights = DEFAULT_WEIGHTS) -> TAScore:
-    """Score a single (TA, SOBJ) pair."""
+    """Score a single (TA, SOBJ) pair.
+
+    Gate-failed TARs are fully scored across all 4 dimensions so the frontend
+    can display meaningful radar charts. They are distinguished from qualified
+    TARs by final_score=None and rank=None, and appear at the bottom of the
+    ranked output. The gate_result flag carries the pass/fail status.
+    """
 
     gate = check_gates(ta)
+
+    # Always compute all 4 dimension scores regardless of gate result.
+    # This ensures gate-failed TARs have real scores for the radar chart.
+    eff_score,  eff_bd   = score_effectiveness(ta.effectiveness)
+    susc_score, susc_bd  = score_susceptibility(ta.susceptibility, ta.sobj_direction)
+    vuln_score, vuln_bd  = score_vulnerability_depth(ta.vulnerabilities)
+    acc_score,  acc_bd   = score_accessibility(ta.accessibility)
+
+    dimension_scores = {
+        "effectiveness":  round(eff_score,  4),
+        "susceptibility": round(susc_score, 4),
+        "vulnerability":  round(vuln_score, 4),
+        "accessibility":  round(acc_score,  4)
+    }
+    dimension_breakdowns = {
+        "effectiveness":  eff_bd,
+        "susceptibility": susc_bd,
+        "vulnerability":  vuln_bd,
+        "accessibility":  acc_bd
+    }
 
     if not gate.passed:
         return TAScore(
@@ -437,17 +463,12 @@ def score_ta(ta: TAInput, weights: ScoringWeights = DEFAULT_WEIGHTS) -> TAScore:
             sobj_id=ta.sobj_id,
             gate_result=gate,
             composite_score=None,
-            dimension_scores={},
-            dimension_breakdowns={},
+            dimension_scores=dimension_scores,
+            dimension_breakdowns=dimension_breakdowns,
             size_modifier=1.0,
             final_score=None,
             recommendation=f"DISQUALIFIED — {gate.reason}"
         )
-
-    eff_score,  eff_bd   = score_effectiveness(ta.effectiveness)
-    susc_score, susc_bd  = score_susceptibility(ta.susceptibility, ta.sobj_direction)
-    vuln_score, vuln_bd  = score_vulnerability_depth(ta.vulnerabilities)
-    acc_score,  acc_bd   = score_accessibility(ta.accessibility)
 
     composite = (
         eff_score  * weights.effectiveness  +
@@ -456,26 +477,16 @@ def score_ta(ta: TAInput, weights: ScoringWeights = DEFAULT_WEIGHTS) -> TAScore:
         acc_score  * weights.accessibility
     )
 
-    size_mod   = audience_size_modifier(ta.audience_size)
-    final      = round(composite * size_mod, 4)
+    size_mod = audience_size_modifier(ta.audience_size)
+    final    = round(composite * size_mod, 4)
 
     return TAScore(
         ta_id=ta.ta_id,
         sobj_id=ta.sobj_id,
         gate_result=gate,
         composite_score=round(composite, 4),
-        dimension_scores={
-            "effectiveness":  round(eff_score,  4),
-            "susceptibility": round(susc_score, 4),
-            "vulnerability":  round(vuln_score, 4),
-            "accessibility":  round(acc_score,  4)
-        },
-        dimension_breakdowns={
-            "effectiveness":  eff_bd,
-            "susceptibility": susc_bd,
-            "vulnerability":  vuln_bd,
-            "accessibility":  acc_bd
-        },
+        dimension_scores=dimension_scores,
+        dimension_breakdowns=dimension_breakdowns,
         size_modifier=size_mod,
         final_score=final
     )
