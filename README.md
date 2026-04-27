@@ -1,10 +1,33 @@
 # MK Intel
 
-**AI-first Target Audience Analysis platform.**
+MK Intel is a target audience analysis system. It maps a company's customer data to behavioral archetypes derived from U.S. census and survey research, then generates ranked, evidence-based Target Audience Reports (TARs) — structured analytical documents that recommend *which* audience segments to prioritize for a specific campaign objective, and *how* to reach them.
 
-MK Intel maps a company's customer data to behavioral archetypes derived from U.S. census and survey research, then generates ranked, evidence-based Target Audience Reports (TARs) — structured analytical documents that tell a campaign team *which* audience segments to target for a specific objective, and exactly *how* to reach them.
+This is Module 1 of the [Market Kinetics](https://github.com/MarketKinetics) platform — a suite of tools for audience research and campaign analytics.
 
-This is Module 1 of the [Market Kinetics](https://github.com/MarketKinetics) platform — a suite of AI-assisted tools for data-driven influence strategy.
+**Live demo:** [mk-intel-delta.vercel.app](https://mk-intel-delta.vercel.app)
+
+---
+
+## Status
+
+Active development. The platform runs end-to-end against real data and exposes a live demo with two pre-generated example datasets. Methodology decisions are documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+The four-dimensional scoring weights (effectiveness 30%, susceptibility 30%, vulnerability depth 25%, accessibility 15%) are explicitly placeholders. They are directionally reasonable but pending calibration against known-good rankings before any production use. Every score in every TAR is delivered with its full dimension breakdown so the rankings are auditable, and the placeholder status is surfaced in each generated report.
+
+---
+
+## Demo
+
+The fastest way to understand the system is to browse pre-generated TARs in the live demo:
+
+**[mk-intel-delta.vercel.app](https://mk-intel-delta.vercel.app)**
+
+Two example datasets are included:
+
+- **GlobalCart** — e-commerce subscription platform, 50K customers, renewal + reactivation objectives. No ZIP enrichment (illustrates the structural-only matching path).
+- **CloudSync** — consumer SaaS platform with ZIP enrichment enabled, plan upgrade + cancellation reduction objectives. Illustrates the four ZIP confidence cases (A / B1 / B2 / C).
+
+Each example walks through the full pipeline: column mapping, BTA archetype matching, ZIP confidence validation (where applicable), TAR pre-filter and profile refinement, full TAR generation, scoring, and ranked output. The demo also exposes the executive summary view used by analysts in production.
 
 ---
 
@@ -16,25 +39,27 @@ A company uploads their customer data. MK Intel:
 
 2. **Enriches archetypes with company-specific signals** — behavioral data (LTV, churn risk, engagement, subscription status) is merged with the societal baseline to produce company-specific Target Audience (CS) profiles.
 
-3. **Pre-filters candidates** — for each campaign objective, a rule-based engine scores each TA profile on behavioral plausibility. Only viable candidates proceed to full report generation.
+3. **Pre-filters candidates** — for each campaign objective, a rule-based engine scores each TA profile on behavioral plausibility. Only viable candidates proceed to full report generation, avoiding expensive LLM calls on implausible combinations.
 
-4. **Generates structured Target Audience Reports** — each TAR is built in 8 sequential LLM calls covering effectiveness, behavioral conditions, psychological vulnerabilities, susceptibility, channel accessibility, persuasion narrative, measurement framework, and traceability. Every claim is source-tagged: `company_data`, `bta_baseline`, `zip_inference`, or `llm_inference`.
+4. **Generates structured Target Audience Reports** — each TAR is built in 8 sequential LLM calls covering effectiveness, behavioral conditions, psychographic and demographic vulnerabilities, susceptibility, channel accessibility, persuasion narrative, measurement framework, and traceability. Every claim is source-tagged: `company_data`, `bta_baseline`, `zip_inference`, or `llm_inference`.
 
-5. **Scores and ranks audiences** — A transparent 4-dimension scoring algorithm — effectiveness, susceptibility, vulnerability depth, and accessibility — produces a ranked priority list per campaign objective. Every score includes a full dimension breakdown so rankings are auditable and explainable.
+5. **Scores and ranks audiences** — a transparent four-dimension scoring algorithm produces a ranked priority list per campaign objective. Every score includes a full dimension breakdown so rankings are auditable and explainable.
 
-6. **Delivers executive summaries** — on-demand HTML and JSON summaries with LLM-generated human-friendly audience names, verdict badges, top recommended actions, and key risks.
+6. **Delivers executive summaries** — on-demand HTML and JSON summaries with human-friendly audience names, verdict badges, top recommended actions, and key risks.
 
 ---
 
 ## Why it's different
 
-**Grounded in real population data.** The societal baseline is built from 15.9M ACS PUMS individual records, GSS psychological trait projections, and Pew media behavior data — not invented personas.
+**Grounded in real population data.** The societal baseline is built from approximately 15.9M ACS PUMS individual records, with psychological traits projected from GSS respondents and media behavior from Pew NPORS — all using demographic cell matching with hierarchical fallback. No invented personas.
 
-**Transparent scoring.** Every ranked output includes full dimension breakdowns. No black-box scores. An analyst can trace every recommendation back to its evidence source.
+**Projection over imputation.** Psychological signals on each archetype are population-level inferences — probability distributions over demographically similar respondents — not point estimates assigned to individuals. The distinction matters for both honesty and accuracy.
 
-**Compliance-aware.** Four compliance modes (standard, banking_us, banking_eu, eu_gdpr) gate which signals may be used as clustering inputs. Race/ethnicity is never a direct targeting criterion.
+**Transparent scoring.** Every ranked output includes its full dimension breakdown. No black-box scores. An analyst can trace every recommendation back to its evidence source via the source-tagging discipline applied to every claim.
 
-**Ethical guardrails built in.** Every TAR includes an ethics section specifying excluded tactics, privacy constraints, and fairness requirements — generated alongside the analytical content, not as an afterthought.
+**Compliance-aware.** Four compliance modes (`standard`, `banking_us`, `banking_eu`, `eu_gdpr`) gate which signals may be used as clustering inputs. Race and ethnicity are never used as direct targeting criteria — they appear only as population descriptors derived from census data, never inferred for individuals.
+
+**Effectiveness gate as a feature.** Audiences that fail the effectiveness gate (rating ≤ 2) are not silently down-ranked or hidden. They appear in output with an explicit "Not recommended" verdict and a stated disqualification reason. This is deliberately preferable to soft scoring because it forces explicit reasoning about why an audience does not fit, rather than burying the judgment in a number.
 
 ---
 
@@ -61,7 +86,9 @@ Per-session pipeline (runs per company)
                         → Ranked output + executive summaries
 ```
 
-**Stack:** Python · FastAPI · Celery · Redis · ChromaDB · SQLite · Anthropic API (Claude Haiku)
+**Stack:** Python · FastAPI · Celery · Redis · ChromaDB · SQLite · React (Vite) · Anthropic API (Claude Haiku)
+
+For full design rationale and decision history, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 
@@ -77,7 +104,7 @@ Per-session pipeline (runs per company)
 | BTA_05 | Young Non-Owning Singles | 14.4% |
 | BTA_06 | Established Mid-Career Homeowners | 19.1% |
 
-Derived from ACS PUMS microdata using K-Prototypes clustering. Psychological and media signals are projected from GSS and Pew NPORS respondents via demographic cell matching — not imputed at the individual level.
+Derived from ACS PUMS microdata using K-Prototypes clustering on individual-level features. Psychological and media signals are projected from GSS and Pew NPORS respondents via demographic cell matching with hierarchical fallback — not imputed at the individual level. Survey weights (`PWGTP`) are applied throughout.
 
 ---
 
@@ -87,9 +114,9 @@ Each Target Audience Report covers:
 
 | Section | Content |
 |---|---|
-| Effectiveness | Can this audience accomplish the objective? Gate check (rating > 2 required). |
-| Conditions | Why do they behave as they do today? External + internal conditions, consequences. |
-| Vulnerabilities | Motives, psychographics, demographics, symbols and cues. |
+| Effectiveness | Can this audience accomplish the objective? Gate check (rating > 2 required for recommendation). |
+| Conditions | Why do they behave as they do today? External and internal conditions, consequences. |
+| Vulnerabilities | Motives, psychographics, demographics, symbols and cues that create persuasion levers. |
 | Susceptibility | Perceived risks and rewards, value alignment, recommended persuasion approach. |
 | Accessibility | Channel-by-channel reach quality, restrictions, constraints. |
 | Narrative & Actions | Main argument (IF/THEN), supporting arguments, recommended actions with timing and channel. |
@@ -125,19 +152,9 @@ GET  /examples/{slug}/tars/{tar_id}/summary.html   live example summary
 
 ---
 
-## Demo
-
-Live demo available at **[link coming soon]**
-
-Pre-generated examples included:
-- **GlobalCart** — e-commerce subscription platform, 50K customers, renewal + reactivation objectives
-- **CloudSync** — SaaS platform with ZIP enrichment, plan upgrade + cancellation reduction objectives
-
----
-
 ## Running locally
 
-**Prerequisites:** Python 3.11+, Redis
+**Prerequisites:** Python 3.11+, Redis, Node.js 18+ (for frontend).
 
 ```bash
 git clone https://github.com/MarketKinetics/mk-intel.git
@@ -148,25 +165,38 @@ source venv/bin/activate
 pip install -r backend/requirements.txt
 
 cp .env.example .env
-# Add your ANTHROPIC_API_KEY to .env
 ```
 
+Add your `ANTHROPIC_API_KEY` to `.env`.
+
 **Start Redis:**
+
 ```bash
-brew install redis && brew services start redis  # macOS
+brew install redis && brew services start redis
 ```
 
 **Start Celery worker (terminal 1):**
+
 ```bash
 PYTHONPATH=. celery -A backend.celery_app worker --loglevel=info
 ```
 
 **Start API (terminal 2):**
+
 ```bash
 PYTHONPATH=. uvicorn backend.main:app --reload
 ```
 
+**Start frontend (terminal 3):**
+
+```bash
+cd mk-intel-frontend
+npm install
+npm run dev
+```
+
 **Health check:**
+
 ```bash
 curl http://localhost:8000/health
 ```
@@ -176,24 +206,24 @@ curl http://localhost:8000/health
 ## Project structure
 
 ```
-mk-intel/
-├── mk-intel/                  core pipeline scripts
-│   ├── mk_intel_session.py    session model
-│   ├── mk_tar_prefilter.py    profile refinement + pre-filter
-│   ├── mk_tar_generator.py    TAR generation (8 sections)
-│   ├── mk_ta_scoring_algorithm.py  scoring + ranking
-│   └── ingestion/             data ingestion pipeline
-├── backend/                   FastAPI + Celery backend
-│   ├── routers/               API endpoints
-│   ├── tasks/                 Celery background tasks
-│   └── db/                    SQLite (jobs + demo auth)
-├── notebooks/                 methodology demo notebooks
+mk-intel/                       (repo root)
+├── mk_intel_session.py         session model
+├── mk_tar_prefilter.py         profile refinement + pre-filter
+├── mk_tar_generator.py         TAR generation (8 sequential sections)
+├── mk_ta_scoring_algorithm.py  scoring + ranking
+├── ingestion/                  data ingestion pipeline
+├── backend/                    FastAPI + Celery backend
+│   ├── routers/                API endpoints
+│   ├── tasks/                  Celery background tasks
+│   └── db/                     SQLite (jobs + demo auth)
+├── mk-intel-frontend/          React (Vite) frontend
+├── notebooks/                  methodology demo notebooks
 │   ├── 12_ingestion_demo_ecommerce.ipynb
 │   ├── 13_ingestion_demo_zip_enrichment.ipynb
 │   ├── 14_TAR_prefilter.ipynb
 │   └── 15_TAR_generation_and_scoring.ipynb
 └── docs/
-    └── ARCHITECTURE.md        design decisions + methodology
+    └── ARCHITECTURE.md         design decisions + methodology
 ```
 
 ---
@@ -203,9 +233,11 @@ mk-intel/
 The `notebooks/` directory contains end-to-end demos of each pipeline stage:
 
 - **NB12** — E-commerce ingestion demo (GlobalCart, 50K customers)
-- **NB13** — ZIP enrichment validation (CloudSync, Cases A/B1/B2/C)
+- **NB13** — ZIP enrichment validation (CloudSync, Cases A / B1 / B2 / C)
 - **NB14** — TAR pre-filter and profile refinement
 - **NB15** — TAR generation and scoring (full pipeline)
+
+These are intended as walkthroughs of the methodology, not as data analysis artifacts — they explain *why* each stage exists and *how* it makes its decisions.
 
 ---
 
@@ -215,13 +247,13 @@ MK Intel is the first module of the Market Kinetics platform:
 
 | Module | Description | Status |
 |---|---|---|
-| **MK Intel** | Target audience analysis + report generation | ✅ Active |
+| **MK Intel** | Target audience analysis and report generation | Active |
 | MK Campaign | Campaign execution and channel orchestration | Planned |
-| MK Product | Communication product studio — input a product worksheet, output multimedia campaign drafts (copy, visuals, video scripts) | Planned |
-| MK Engage | Meeting simulator — input personality traits and objectives for both parties, get an interactive testbed to rehearse and stress-test the encounter before it happens | Planned |
+| MK Product | Campaign draft generator — produces coordinated copy, visuals, and video scripts grounded in the audience archetypes from MK Intel | Planned |
+| MK Engage | Stakeholder meeting simulator — rehearse high-stakes conversations against simulated counterparts informed by audience archetypes | Planned |
 
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+MIT — see [LICENSE](LICENSE).
