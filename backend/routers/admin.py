@@ -143,7 +143,7 @@ def _build_session_zip(session_id: str) -> io.BytesIO:
                     rank_lookup = {}
                     for sobj_id, sobj_rankings in rankings_data.items():
                         for r in sobj_rankings:
-                            rank_lookup[r["tar_id"]] = r.get("rank", 999)
+                            rank_lookup[r["tar_id"]] = r.get("rank") or 999
 
                     # Group TARs by SOBJ
                     tars_by_sobj = {}

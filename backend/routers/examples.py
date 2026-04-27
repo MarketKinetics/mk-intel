@@ -183,7 +183,7 @@ def export_example_tars_html(slug: str, sobj_id: str):
     if rankings_path.exists():
         raw_rankings = json.loads(rankings_path.read_text())
         for r in raw_rankings.get(sobj_id, []):
-            rankings[r["tar_id"]] = r.get("rank", 999)
+            rankings[r["tar_id"]] = r.get("rank") or 999
 
     tars = []
     for f in sorted(tars_dir.glob("*.json")):
