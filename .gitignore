@@ -62,3 +62,9 @@ requirements.txt
 
 # Handoff docs
 MK_Intel_Handoff.md
+
+*.zip
+old/
+**/old/
+run1/
+run2/
