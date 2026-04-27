@@ -21,7 +21,7 @@ EXAMPLES = {
         "slug":        "cloudsync",
         "name":        "CloudSync",
         "sector":      "SaaS",
-        "description": "B2B SaaS platform. 1,500 customers with ZIP code enrichment — illustrates income and race divergence cases against the census baseline. Objective: reduce subscription cancellations.",
+        "description": "Consumer SaaS subscription platform. 1,500 customers with ZIP code enrichment — illustrates income and race divergence cases against the census baseline. Objective: reduce subscription cancellations.",
         "sobj_count":  1,
         "ta_count":    6,
         "tar_count":   4,

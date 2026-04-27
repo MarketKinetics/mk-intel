@@ -151,7 +151,7 @@ const FALLBACK_EXAMPLES = [
     slug: 'cloudsync',
     name: 'CloudSync',
     sector: 'SaaS',
-    description: 'B2B SaaS platform. 1,500 customers with ZIP code enrichment — illustrates income and race divergence cases against the census baseline. Objective: reduce subscription cancellations.',
+    description: 'Consumer SaaS subscription platform. 1,500 customers with ZIP code enrichment — illustrates income and race divergence cases against the census baseline. Objective: reduce subscription cancellations.',
     ta_count: 6, tar_count: 4, sobj_count: 1, zip_enrichment: true,
   },
 ]
@@ -468,7 +468,7 @@ const PRESETS = {
     csvName: 'globalcart_ecommerce.csv',
   },
   cloudsync: {
-    company: { name: 'CloudSync', industry: 'SaaS', customer_type: 'B2B', description: 'B2B SaaS platform. 1,500 customers.' },
+    company: { name: 'CloudSync', industry: 'SaaS', customer_type: 'B2C', description: 'Consumer SaaS subscription platform. 1,500 customers.' },
     objective: { statement: 'Reduce subscription cancellations' },
     sobjs: [{ id: 'SOBJ-01', statement: 'TA renews subscription at next billing cycle', direction: 'retain' }],
     csvUrl: 'https://raw.githubusercontent.com/MarketKinetics/mk-intel/main/data/demo/cloudsync_saas.csv',
