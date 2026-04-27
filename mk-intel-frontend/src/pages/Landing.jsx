@@ -54,9 +54,12 @@ export function Landing() {
         className="flex flex-col items-center justify-center text-center px-6 py-24"
         style={{ background: 'radial-gradient(ellipse at 50% -10%, #102847 0%, #0A1628 65%)' }}
       >
-        <div className="inline-flex items-center gap-2 border border-teal-accent/25 bg-teal-accent/10 text-teal-accent text-xs px-4 py-1.5 rounded-full mb-8">
-          <span className="w-1.5 h-1.5 rounded-full bg-teal-accent inline-block" />
-          AI-first audience intelligence
+        <div className="inline-flex items-center gap-2.5 border border-teal-accent/30 bg-teal-accent/15 text-teal-accent text-sm font-medium px-5 py-2 rounded-full mb-8">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-accent opacity-60"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-teal-accent"></span>
+          </span>
+          AI-first audience intelligence · Census-grounded
         </div>
 
         <h1 className="text-5xl font-medium text-white/95 leading-tight tracking-tight mb-6 max-w-2xl">
