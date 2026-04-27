@@ -475,7 +475,7 @@ export function ExampleDetail() {
                 })
                 return (
                   <div key={r.tar_id} className={`flex items-center gap-3 p-3 rounded-lg ${r.rank === 1 ? 'bg-teal-accent/5 border border-teal-accent/20' : 'bg-surface'}`}>
-                    <span className={`text-sm font-medium w-6 flex-shrink-0 ${r.rank === 1 ? 'text-teal-dark' : 'text-slate'}`}>#{r.rank}</span>
+                    <span className={`text-sm font-medium w-9 flex-shrink-0 ${r.rank === 1 ? 'text-teal-dark' : r.rank === null ? 'text-slate/60' : 'text-slate'}`}>{r.rank ? `#${r.rank}` : 'DISQ'}</span>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-ink mb-2 leading-tight">{tar?.audience_name || r.tar_id}</div>
                       <div className="grid grid-cols-4 gap-2">
@@ -491,7 +491,7 @@ export function ExampleDetail() {
                       </div>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <div className="text-sm font-medium text-ink">{r.final_score?.toFixed(3)}</div>
+                      <div className="text-sm font-medium text-ink">{r.final_score !== null && r.final_score !== undefined ? r.final_score.toFixed(3) : '—'}</div>
                       <div className="text-xs text-slate">score</div>
                     </div>
                   </div>

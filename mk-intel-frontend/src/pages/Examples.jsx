@@ -37,7 +37,7 @@ const PIPELINE_STEPS = [
   {
     label: 'BTA matching',
     tag: 'Matching',
-    desc: 'Eligible customers are mapped to 7 societal archetypes via structural matching against the census-derived baseline. Matches are made on age, income, tenure, education, and employment.',
+    desc: 'Eligible customers are mapped to 7 societal archetypes — the building blocks of every Target Audience (TA) the platform produces. Matching is structural, against the census-derived baseline, on age, income, housing tenure, education, and employment.',
     data: {
       type: 'archetypes',
       label: 'Archetype distribution — GlobalCart',
@@ -53,7 +53,7 @@ const PIPELINE_STEPS = [
   {
     label: 'ZIP enrichment',
     tag: 'Validation',
-    desc: 'Geographic validation against ZCTA census data cross-checks the archetype assignment for each segment. Each segment receives a confidence case that determines how its profile is used downstream.',
+    desc: 'Geographic validation against ZIP-level census data cross-checks the archetype assignment for each segment. Each segment receives a confidence case that determines how its profile is used downstream. GlobalCart did not include ZIP codes, so all records default to Case A — see the CloudSync example for B1 and B2 in action.',
     data: {
       type: 'cases',
       label: 'Confidence cases — GlobalCart',
@@ -101,12 +101,12 @@ const PIPELINE_STEPS = [
       type: 'prefilter',
       label: 'Profile refinement + candidate selection — GlobalCart',
       candidates: [
-        { id: 'CS00_BTA_05', original: 'Young Non-Owning Singles', refined: 'Mobile-First Value-Conscious Renewers', passed: true },
-        { id: 'CS01_BTA_04', original: 'Mid-Career Homeowners', refined: 'Convenience-Seeking Homeowner Subscribers', passed: true },
-        { id: 'CS01_BTA_05', original: 'Young Non-Owning Singles (alt.)', refined: 'Budget-Conscious Young Renters', passed: true },
-        { id: 'CS01_BTA_06', original: 'Established Homeowners', refined: 'Financially Disciplined Mid-Career Homeowners', passed: true },
+        { id: 'CS01_BTA_04', original: 'Mid-Career Homeowners', refined: 'Moderate-Engagement Mid-Career Subscription Customers', passed: true },
+        { id: 'CS01_BTA_06', original: 'Established Mid-Career Homeowners', refined: 'High-Engagement Established Subscribers', passed: true },
+        { id: 'CS01_BTA_05', original: 'Young Non-Owning Singles', refined: 'Moderate-Engagement Young-Adult Subscription Customers', passed: true },
+        { id: 'CS00_BTA_05', original: 'Young Non-Owning Singles (alt.)', refined: 'Lightweight Active Young-Adult Subscribers', passed: true },
+        { id: 'CS00_BTA_00', original: 'Diverse Mid-Life Workers', refined: null, passed: false },
         { id: 'CS00_BTA_01', original: 'Older Non-Partnered Adults', refined: null, passed: false },
-        { id: 'CS00_BTA_02', original: 'Young Hispanic Working Adults', refined: null, passed: false },
         { id: 'CS00_BTA_03', original: 'Retired Renters', refined: null, passed: false },
       ]
     }
@@ -114,7 +114,7 @@ const PIPELINE_STEPS = [
   {
     label: 'TAR generation',
     tag: 'Generation',
-    desc: 'An 8-section Target Audience Report is generated per candidate audience. Each section builds on the previous, ensuring a coherent, internally consistent report throughout.',
+    desc: 'An 8-section Target Audience Report (TAR) is generated per candidate. Each section builds on the previous, ensuring a coherent, internally consistent report throughout. A deterministic effectiveness gate filters out audiences that lack the authority or resources to act on the objective — disqualified TARs are kept on file with their reason rather than discarded.',
     data: {
       type: 'sections',
       label: 'Report structure — 8 sections per audience',
@@ -130,10 +130,10 @@ const PIPELINE_STEPS = [
       type: 'rankings',
       label: 'Final rankings — GlobalCart · renew subscription',
       rankings: [
-        { rank: 1, name: 'Convenience-Seeking Homeowner Subscribers', score: '0.757', badge: 'First priority', dim: [0.71, 0.63, 0.95, 0.95] },
-        { rank: 2, name: 'Mobile-First Value-Conscious Renewers', score: '0.709', badge: 'High priority', dim: [0.76, 0.44, 0.91, 0.95] },
-        { rank: 3, name: 'Financially Disciplined Mid-Career Homeowners', score: '0.693', badge: 'Medium priority', dim: [0.86, 0.42, 0.95, 1.00] },
-        { rank: 4, name: 'Budget-Conscious Young Renters', score: '0.692', badge: 'Lower priority', dim: [0.46, 0.63, 0.95, 1.00] },
+        { rank: 1, name: 'Moderate-Engagement Mid-Career Subscription Customers', score: '0.852', badge: 'First priority', dim: [0.86, 0.78, 0.95, 1.00] },
+        { rank: 2, name: 'High-Engagement Established Subscribers', score: '0.800', badge: 'High priority', dim: [0.86, 0.81, 0.95, 1.00] },
+        { rank: 3, name: 'Moderate-Engagement Young-Adult Subscription Customers', score: '0.797', badge: 'Medium priority', dim: [0.71, 0.76, 0.95, 0.95] },
+        { rank: null, name: 'Lightweight Active Young-Adult Subscribers', score: '—', badge: 'Disqualified', dim: [0.21, 0.38, 0.95, 1.00] },
       ]
     }
   },
@@ -151,8 +151,8 @@ const FALLBACK_EXAMPLES = [
     slug: 'cloudsync',
     name: 'CloudSync',
     sector: 'SaaS',
-    description: 'B2B SaaS platform. 1,500 customers with ZIP enrichment — real-world confidence case variety across full alignment, income divergence, and race divergence scenarios. Objective: reduce subscription cancellations.',
-    ta_count: 6, tar_count: 4, sobj_count: 2, zip_enrichment: true,
+    description: 'B2B SaaS platform. 1,500 customers with ZIP code enrichment — illustrates income and race divergence cases against the census baseline. Objective: reduce subscription cancellations.',
+    ta_count: 6, tar_count: 4, sobj_count: 1, zip_enrichment: true,
   },
 ]
 
@@ -317,7 +317,7 @@ function StepData({ step }) {
         {d.rankings.map(r => (
           <div key={r.rank} className={`rounded-lg p-3 border ${r.rank === 1 ? 'border-teal-accent/30 bg-teal-accent/5' : 'border-gray-100 bg-surface'}`}>
             <div className="flex items-center gap-2 mb-2">
-              <span className={`text-xs font-medium w-5 ${r.rank === 1 ? 'text-teal-dark' : 'text-slate'}`}>#{r.rank}</span>
+              <span className={`text-xs font-medium w-7 ${r.rank === 1 ? 'text-teal-dark' : 'text-slate'}`}>{r.rank ? `#${r.rank}` : 'DISQ'}</span>
               <span className="text-xs font-medium text-ink flex-1 leading-tight">{r.name}</span>
               <span className="text-sm font-medium text-ink">{r.score}</span>
               <span className={`text-xs px-2 py-0.5 rounded font-medium flex-shrink-0

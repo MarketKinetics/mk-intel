@@ -15,18 +15,18 @@ EXAMPLES = {
         "ta_count":    7,
         "tar_count":   4,
         "zip_enrichment": False,
-        "session_slug": "dbfcaa5d",
+        "session_slug": "7589afa6",
     },
     "cloudsync": {
         "slug":        "cloudsync",
         "name":        "CloudSync",
         "sector":      "SaaS",
-        "description": "B2B SaaS platform. 1,500 customers with ZIP enrichment — real-world confidence case variety across full alignment, income divergence, and race divergence scenarios. Objective: reduce subscription cancellations.",
+        "description": "B2B SaaS platform. 1,500 customers with ZIP code enrichment — illustrates income and race divergence cases against the census baseline. Objective: reduce subscription cancellations.",
         "sobj_count":  1,
         "ta_count":    6,
         "tar_count":   4,
         "zip_enrichment": True,
-        "session_slug": "3245d131",
+        "session_slug": "a7f77926",
     },
 }
 
@@ -188,7 +188,7 @@ def export_example_tars_html(slug: str, sobj_id: str):
     tars = []
     for f in sorted(tars_dir.glob("*.json")):
         data = json.loads(f.read_text())
-        if data.get("sobj_id") == sobj_id and data.get("gate_passed"):
+        if data.get("sobj_id") == sobj_id:
             tars.append(data)
 
     if not tars:
