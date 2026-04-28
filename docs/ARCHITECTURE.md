@@ -1,8 +1,8 @@
 # MK Intel — Architecture Overview
 
-MK Intel is an AI-first Target Audience Analysis platform that combines U.S. population segmentation, psychographic inference, and business data ingestion to produce ranked, evidence-based audience intelligence for B2C campaigns.
+MK Intel is a target audience analysis system that uses LLM reasoning as a load-bearing component, under structural guardrails that prevent AI-induced inaccuracy. The system combines U.S. population segmentation, psychographic projection, and business data ingestion to produce ranked, evidence-based audience intelligence for consumer-facing campaigns.
 
-This document explains how the system is built and why key design decisions were made.
+This document explains how the system is built and why key design decisions were made. The animating principle throughout is the same: use LLMs where they outperform rules — interpretation, contextualization, narrative generation, naming — and never where they don't — matching real data, enforcing thresholds, scoring, deciding what is recommended. The boundary is enforced structurally, not procedurally.
 
 ---
 
@@ -18,6 +18,22 @@ The pipeline has three layers:
 
 ---
 
+## The methodological thesis: projection over imputation
+
+This is the design choice that does the most analytical work in the system, and it deserves to be stated explicitly before the data sources are described.
+
+The system needs psychological and media-behavior signals on every adult in the U.S. population. Two large public surveys carry these signals — GSS for psychological traits, Pew NPORS for media behavior — but neither shares identifiers with the structural population frame (ACS PUMS), so direct merge is impossible. Two responses are possible:
+
+- **Imputation** would invent a point estimate for each individual — "this 34-year-old in this ZIP code holds these specific beliefs" — by training a predictor on the survey respondents and applying it to the ACS frame. This is convenient and produces clean per-individual fields, but the per-individual claim is fictional. The model is reading off the modal beliefs of demographically similar people and asserting them as facts about a specific person.
+
+- **Projection** infers a probability distribution instead. For each ACS adult, traits are not values but distributions — "among demographically similar respondents, X% hold this view." Aggregated to the cluster level, this produces psychological and media profiles that represent the likely attitudinal distribution of each segment, with the per-individual fiction removed.
+
+MK Intel uses projection. Cluster-level psychological signals on each archetype are aggregated probability distributions over demographically matched survey respondents, not point estimates assigned to individuals. The distinction matters for both honesty (the system does not claim to know what a specific person believes) and for accuracy (cluster-level distributions are the correct unit of inference for population-level targeting decisions).
+
+Direction is preserved alongside magnitude — being distinctly *non*-X on a trait is as informative for targeting as being distinctly X. Trait labels stripped of direction are ambiguous and produce incorrect LLM interpretations downstream, so the direction is carried through the entire pipeline into the prompts that generate persuasion narratives.
+
+---
+
 ## Societal baseline pipeline
 
 ### Data sources
@@ -25,19 +41,13 @@ The pipeline has three layers:
 The baseline layer integrates three public datasets:
 
 **ACS PUMS (American Community Survey Public Use Microdata Sample)**
-The structural foundation. ~15.9M individual person records with demographic, economic, and housing variables. Used at the individual level — not aggregated summary tables — to preserve the full joint distribution of attributes needed for segmentation. Person weights (`PWGTP`) are applied throughout to ensure population representativeness.
+The structural foundation. Approximately 15.9M individual person records with demographic, economic, and housing variables. Used at the individual level — not aggregated summary tables — to preserve the full joint distribution of attributes needed for segmentation. Person weights (`PWGTP`) are applied throughout to ensure population representativeness.
 
 **GSS (General Social Survey)**
-The psychological layer. The only recurring nationally representative U.S. survey that simultaneously covers ideology, party alignment, religiosity, life satisfaction, and media engagement. GSS respondents cannot be directly merged with ACS records, so psychological traits are projected onto ACS adults via demographic cell matching with hierarchical fallback.
+The psychological layer. The only recurring nationally representative U.S. survey that simultaneously covers ideology, party alignment, religiosity, life satisfaction, and media engagement. GSS respondents cannot be directly merged with ACS records, so psychological traits are projected onto ACS adults via demographic cell matching with hierarchical fallback (see "The methodological thesis" above).
 
 **Pew NPORS (News Platforms and Online Revenue Sources)**
 The media behavior layer. Platform-level usage data for YouTube, Facebook, Instagram, TikTok, WhatsApp, Reddit, Snapchat, and others. Projected onto ACS adults using the same methodology as GSS.
-
-### Why projection instead of direct merge
-
-GSS and Pew are independent samples with no shared identifiers — direct merge is impossible. Instead, for each ACS adult, trait probabilities are inferred from survey respondents who share the same demographic cell (age, sex, race, education). The result is a population-level inference: not what this individual believes, but the probability distribution of beliefs among demographically similar people.
-
-These probabilities are aggregated to the cluster level, producing psychological and media profiles that represent the likely attitudinal distribution of each segment.
 
 ### Segmentation: K-Prototypes clustering
 
@@ -65,7 +75,7 @@ Household income is retained as a contextual descriptor on each archetype card �
 
 Each archetype is represented as a BTA (Baseline Target Audience) card — a structured intelligence object that contains structural descriptors, psychological signals, media signals, LLM-generated summaries, and a RAG-ready text representation. Cards are stored in ChromaDB using `all-MiniLM-L6-v2` embeddings for semantic retrieval.
 
-**Signal direction matters.** Psychological signals are deviations from the national baseline — a cluster can be above or below baseline on any trait. Direction is preserved in prompts passed to the LLM. This distinction required explicit design: trait labels without direction are ambiguous and produce incorrect LLM interpretations.
+The LLM-generated summaries on each card are descriptive synthesis of the underlying signals — they do not invent traits. The structural and probabilistic data is the source; the LLM produces readable prose. This is the first instance in the system of the "AI under guardrails" pattern: the LLM contextualizes data it is given, but cannot generate or override the underlying signals.
 
 ---
 
@@ -79,11 +89,15 @@ The schema is format-agnostic. A dataset with columns named `"Age"`, `"age_years
 
 ### Column mapping: rules → LLM → analyst
 
-**Layer 1 — Rules:** A synonym dictionary plus rapidfuzz fuzzy matching handles ~70-80% of real-world column names at zero cost.
+This is the second instance of the "AI under guardrails" pattern, and it makes the principle concrete:
 
-**Layer 2 — LLM inference:** Unmatched columns are sent to Claude Haiku with sample values. Returns a structured mapping with confidence scores. Cost: <$0.01 per new company.
+**Layer 1 — Rules:** A synonym dictionary plus rapidfuzz fuzzy matching handles ~70-80% of real-world column names at zero cost. Rules are deterministic and cheap, so they go first.
+
+**Layer 2 — LLM inference:** Unmatched columns are sent to Claude Haiku with sample values. Returns a structured mapping with confidence scores. Cost: <$0.01 per new company. The LLM never sees columns the rules already resolved — it only handles the residual where rules genuinely cannot help.
 
 **Layer 3 — Analyst review:** The full proposed mapping is presented for confirmation. Approved mappings are saved per company and never rerun.
+
+The hierarchy reflects cost and reliability: deterministic rules are free and predictable, the LLM is cheap and probabilistic, the analyst is expensive and authoritative. Each layer handles only what the previous layer cannot, and each layer's output is constrained by the next layer's check.
 
 ### Compliance modes
 
@@ -133,11 +147,11 @@ Before generating a full Target Audience Report (TAR), the platform runs a two-s
 - Case B2: cultural and media layer adjusted to reflect ZIP-inferred demographic context
 - Case C: no refinement — custom archetypes are already LLM-generated; passed through with a confidence penalty
 
-Structural fields (age, income, tenure, education) are always locked from real data. The LLM only touches descriptive and contextual fields. All output stays at population segment level — no price points or tactical predictions.
+This is the third instance of the "AI under guardrails" pattern. Structural fields (age, income, tenure, education) are always locked from real data — the LLM cannot touch them. The LLM only refines descriptive and contextual fields, and the refinement scope is constrained by what the data actually supports (no refinement at all in Case C, where the data is too weak to anchor the LLM's reasoning). All output stays at population segment level — no price points or tactical predictions, both of which the LLM is bad at.
 
-**Stage 2 — Candidate shortlisting.** For each SOBJ, a rule engine scores each refined TA card on likelihood of performing the desired behavior. SOBJ vocabulary is matched to behavioral signals on the TA card (churn risk, LTV, subscription status, NPS, feature adoption, etc.). An LLM fallback handles SOBJs not matched by keyword rules. The top candidates per SOBJ — typically 3-4 — proceed to full TAR generation.
+**Stage 2 — Candidate shortlisting.** For each SOBJ, a rule engine scores each refined TA card on likelihood of performing the desired behavior. SOBJ vocabulary is matched to behavioral signals on the TA card (churn risk, LTV, subscription status, NPS, donation history, attendance, feature adoption, and similar). An LLM fallback handles SOBJs not matched by keyword rules. The top candidates per SOBJ — typically 3-4 — proceed to full TAR generation.
 
-This stage reduces the number of TARs generated from O(TAs × SOBJs) to a manageable shortlist, avoiding expensive generation for implausible combinations.
+This stage reduces the number of TARs generated from O(TAs × SOBJs) to a manageable shortlist, avoiding expensive generation for implausible combinations. Rule-based scoring is the default; LLM is a fallback only when the rules genuinely cannot match.
 
 ### Scoring algorithm
 
@@ -147,22 +161,22 @@ Each (audience archetype, SOBJ) pair is scored across four dimensions:
 |---|---|---|
 | Effectiveness | 30% | Can this audience accomplish the objective? |
 | Susceptibility | 30% | Will this audience respond to the approach? |
-| Vulnerability depth | 25% | How many persuasion levers exist? |
+| Lever depth | 25% | How many persuasion levers exist? |
 | Accessibility | 15% | Can we reach them through available channels? |
 
-Four hard gates screen out disqualified audiences before scoring begins (insufficient effectiveness rating, ill-defined behavior, no vulnerabilities, no usable channels). Failed gates produce a disqualification reason rather than a score.
+Four hard gates screen out disqualified audiences before scoring begins (insufficient effectiveness rating, ill-defined behavior, no persuasion levers, no usable channels). Failed gates produce a disqualification reason rather than a score.
 
 The composite score is multiplied by an audience size modifier (0.85–1.15, scaled by estimate confidence), producing a final score used to rank all audiences for each SOBJ.
 
-**Weights are explicitly labeled as placeholders** and must be calibrated against known-good rankings before production use. The dimension breakdown is always included in output so rankings are auditable.
+**The scoring algorithm is fully deterministic and runs in Python — no LLM involvement in the scoring decision itself.** The weights reflect deliberate prior beliefs about how the four factors trade off — effectiveness and susceptibility weighted highest because failure on either undermines everything else, lever depth next because more available persuasion levers means more campaign flexibility, accessibility lowest because most channels are workable for most audiences. These priors have not yet been empirically calibrated against labeled campaign outcomes, and that calibration is the next major methodological step before any production use. The dimension breakdown is always included in output so rankings are auditable. This is the fourth instance of the guardrails pattern: the LLM produces the *content* that the scoring algorithm acts on, but the scoring decision itself is rules-based.
 
 ### TAR generation
 
-Each Target Audience Report is generated in 8 sequential LLM calls — one per schema section (effectiveness, conditions, vulnerabilities, susceptibility, accessibility, narrative and actions, assessment, traceability). Sequential calls allow each section to receive prior sections as context, enabling internally consistent cross-referencing between condition IDs, vulnerability IDs, argument IDs, and action IDs.
+Each Target Audience Report is generated in 8 sequential LLM calls — one per schema section (effectiveness, conditions, persuasion levers, susceptibility, accessibility, narrative and actions, assessment, traceability). Sequential calls allow each section to receive prior sections as context, enabling internally consistent cross-referencing between condition IDs, lever IDs, argument IDs, and action IDs.
 
-Every factual claim in the TAR is source-tagged: `company_data`, `bta_baseline`, `zip_inference`, or `llm_inference`. This makes the evidential basis of every claim visible to the analyst — data-grounded claims can be acted on immediately, `llm_inference` claims flag for validation before scaling.
+Every factual claim in the TAR is source-tagged: `company_data`, `bta_baseline`, `zip_inference`, or `llm_inference`. This makes the evidential basis of every claim visible to the analyst — data-grounded claims can be acted on immediately, `llm_inference` claims flag for validation before scaling. Source-tagging is the system's most important guardrail: it does not prevent the LLM from producing inferred content, but it makes that content visible and labelable as such, so the reader is never asked to take an LLM-inferred claim as fact.
 
-The effectiveness gate (`rating > 2`) is enforced deterministically in Python after parsing — never trusted to the LLM. Gate-failed TARs are saved with a disqualification reason rather than discarded.
+The effectiveness gate (`rating > 2`) is enforced deterministically in Python after parsing — never trusted to the LLM. Gate-failed TARs are saved with a disqualification reason rather than discarded. The LLM is asked to *rate* effectiveness; the *gate* on that rating is structural. This is the difference between letting an LLM judge whether to recommend an audience (unreliable) and letting an LLM produce an input to a deterministic decision rule (reliable).
 
 ### Naming conventions
 
@@ -178,13 +192,15 @@ The effectiveness gate (`rating > 2`) is enforced deterministically in Python af
 
 ## Key design decisions
 
+**AI under guardrails, not AI-everywhere.** LLMs are used where they outperform rules — interpretation, refinement, narrative generation, naming. They are not used to match real data, enforce thresholds, score audiences, or decide what is recommended. The boundary is enforced structurally: structural fields are locked from real data before any LLM prompt is constructed; the effectiveness gate runs in Python after parsing; the scoring algorithm is fully deterministic; every claim is source-tagged so LLM inference is visible as such.
+
 **Individual over household.** The targeting unit is always a person. Household income is context, not signal.
 
-**Projection over imputation.** Psychological traits are probability distributions from demographically matched survey data, not point estimates invented for individuals without survey responses.
+**Projection over imputation.** Psychological traits are probability distributions from demographically matched survey data, not point estimates invented for individuals without survey responses. (See "The methodological thesis" above.)
 
-**Direction-aware signals.** Being distinctly *non*-X on a trait is as meaningful as being strongly X. Signal direction must be preserved through the entire pipeline.
+**Direction-aware signals.** Being distinctly *non*-X on a trait is as meaningful for targeting as being strongly X — for example, an audience that is distinctly *not* religiously observant is a different and equally identifiable group from one that is. Signal direction must be preserved through the entire pipeline, including into the prompts that generate persuasion narratives, because trait labels stripped of direction are ambiguous and produce incorrect LLM interpretations.
 
-**Rules before LLM.** Column mapping runs rules first (free, instant), LLM second (cheap, slower), analyst third (accurate, requires human). Cost and latency scale with difficulty.
+**Rules before LLM.** Column mapping runs rules first (free, instant), LLM second (cheap, slower), analyst third (accurate, requires human). Cost and latency scale with difficulty; deterministic logic handles the common case so the LLM only sees the residual.
 
 **Transparent scoring.** The algorithm produces ranked lists with full dimension breakdowns. Every score is explainable — no black-box outputs.
 
@@ -192,4 +208,4 @@ The effectiveness gate (`rating > 2`) is enforced deterministically in Python af
 
 **Pre-filter before generate.** Running TAR generation on every possible (audience, SOBJ) combination is expensive and produces noise. A rule-based pre-filter shortlists only plausible candidates before any generation call. Weak candidates that slip through are handled by the TAR effectiveness gate and scoring algorithm — the pre-filter is deliberately coarse.
 
-**LLM refines, data grounds.** The LLM contextualizes audience profiles for company and product context — it does not override real data signals. Company data beats ZIP inference beats BTA baseline beats LLM speculation. This hierarchy is enforced structurally: fields derived from real data are locked before LLM prompts are constructed.
+**LLM refines, data grounds.** The LLM contextualizes audience profiles for company and product context — it does not override real data signals. Company data beats ZIP inference beats BTA baseline beats LLM speculation. This hierarchy is enforced structurally: fields derived from real data are locked before LLM prompts are constructed, and source-tagging makes the hierarchy visible in every output.

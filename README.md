@@ -1,6 +1,6 @@
 # MK Intel
 
-MK Intel is a target audience analysis system. It maps a company's customer data to behavioral archetypes derived from U.S. census and survey research, then generates ranked, evidence-based Target Audience Reports (TARs) — structured analytical documents that recommend *which* audience segments to prioritize for a specific campaign objective, and *how* to reach them.
+MK Intel is a target audience analysis system that uses LLM reasoning as a load-bearing component, under structural guardrails that prevent AI-induced inaccuracy. The system maps a company's customer data to behavioral archetypes derived from U.S. census and survey research, then generates ranked, evidence-based Target Audience Reports (TARs). LLMs are used where they excel — column-name interpretation, audience profile refinement, narrative generation, audience naming. Real data, deterministic rules, and explicit gates handle everything else. Every claim in every output is tagged by source, so a reader can always see what the LLM said versus what the data said.
 
 This is Module 1 of the [Market Kinetics](https://github.com/MarketKinetics) platform — a suite of tools for audience research and campaign analytics.
 
@@ -12,7 +12,7 @@ This is Module 1 of the [Market Kinetics](https://github.com/MarketKinetics) pla
 
 Active development. The platform runs end-to-end against real data and exposes a live demo with two pre-generated example datasets. Methodology decisions are documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-The four-dimensional scoring weights (effectiveness 30%, susceptibility 30%, vulnerability depth 25%, accessibility 15%) are explicitly placeholders. They are directionally reasonable but pending calibration against known-good rankings before any production use. Every score in every TAR is delivered with its full dimension breakdown so the rankings are auditable, and the placeholder status is surfaced in each generated report.
+The four-dimensional scoring weights (effectiveness 30%, susceptibility 30%, lever depth 25%, accessibility 15%) reflect deliberate prior beliefs about how these factors trade off — effectiveness and susceptibility weighted highest because failure on either undermines everything else, lever depth next because more available persuasion levers means more campaign flexibility, accessibility lowest because most channels are workable for most audiences. These priors have not yet been empirically calibrated against labeled campaign outcomes, and that calibration is the next major methodological step before any production use; the architecture is built to make recalibration tractable, with dimension breakdowns preserved in every output and the deterministic scoring step decoupled from LLM-driven content generation.
 
 ---
 
@@ -37,11 +37,11 @@ A company uploads their customer data. MK Intel:
 
 1. **Maps customers to societal archetypes** — seven behavioral segments derived from ACS PUMS census microdata, GSS survey data, and Pew Research media behavior data. Each archetype carries structural demographics, psychological signals, and media behavior profiles grounded in nationally representative research.
 
-2. **Enriches archetypes with company-specific signals** — behavioral data (LTV, churn risk, engagement, subscription status) is merged with the societal baseline to produce company-specific Target Audience (CS) profiles.
+2. **Enriches archetypes with company-specific signals** — behavioral data (LTV, churn risk, engagement, subscription status, donation history, attendance, and similar) is merged with the societal baseline to produce company-specific Target Audience (CS) profiles.
 
 3. **Pre-filters candidates** — for each campaign objective, a rule-based engine scores each TA profile on behavioral plausibility. Only viable candidates proceed to full report generation, avoiding expensive LLM calls on implausible combinations.
 
-4. **Generates structured Target Audience Reports** — each TAR is built in 8 sequential LLM calls covering effectiveness, behavioral conditions, psychographic and demographic vulnerabilities, susceptibility, channel accessibility, persuasion narrative, measurement framework, and traceability. Every claim is source-tagged: `company_data`, `bta_baseline`, `zip_inference`, or `llm_inference`.
+4. **Generates structured Target Audience Reports** — each TAR is built in 8 sequential LLM calls covering effectiveness, behavioral conditions, persuasion levers, susceptibility, channel accessibility, persuasion narrative, measurement framework, and traceability. Every claim is source-tagged: `company_data`, `bta_baseline`, `zip_inference`, or `llm_inference`.
 
 5. **Scores and ranks audiences** — a transparent four-dimension scoring algorithm produces a ranked priority list per campaign objective. Every score includes a full dimension breakdown so rankings are auditable and explainable.
 
@@ -50,6 +50,8 @@ A company uploads their customer data. MK Intel:
 ---
 
 ## Why it's different
+
+**AI under guardrails, not AI-everywhere.** The system uses LLMs as the load-bearing reasoning layer for tasks where they outperform rules — interpreting non-canonical column names, refining audience profiles to specific company contexts, generating narrative arguments, naming audiences. It does *not* use LLMs to match real data, enforce thresholds, score audiences, or decide which audiences are recommended. The effectiveness gate is enforced in Python after parsing, never inside the LLM call. Structural fields (age, income, tenure, education) are locked from real data before any LLM prompt is constructed — the LLM cannot override them. Every claim in every TAR is source-tagged (`company_data` / `bta_baseline` / `zip_inference` / `llm_inference`) so the evidential basis of every statement is visible to the analyst. The result is AI-enriched output that an analyst can audit and act on, not AI-generated content that has to be fact-checked.
 
 **Grounded in real population data.** The societal baseline is built from approximately 15.9M ACS PUMS individual records, with psychological traits projected from GSS respondents and media behavior from Pew NPORS — all using demographic cell matching with hierarchical fallback. No invented personas.
 
@@ -116,7 +118,7 @@ Each Target Audience Report covers:
 |---|---|
 | Effectiveness | Can this audience accomplish the objective? Gate check (rating > 2 required for recommendation). |
 | Conditions | Why do they behave as they do today? External and internal conditions, consequences. |
-| Vulnerabilities | Motives, psychographics, demographics, symbols and cues that create persuasion levers. |
+| Persuasion levers | Motives, psychographics, demographics, symbols and cues that create receptivity to the campaign. |
 | Susceptibility | Perceived risks and rewards, value alignment, recommended persuasion approach. |
 | Accessibility | Channel-by-channel reach quality, restrictions, constraints. |
 | Narrative & Actions | Main argument (IF/THEN), supporting arguments, recommended actions with timing and channel. |
