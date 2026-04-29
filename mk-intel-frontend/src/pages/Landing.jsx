@@ -59,7 +59,7 @@ export function Landing() {
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-accent opacity-60"></span>
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-teal-accent"></span>
           </span>
-          AI-first audience intelligence · Census-grounded
+          AI-augmented audience intelligence · Census-grounded
         </div>
 
         <h1 className="text-5xl font-medium text-white/95 leading-tight tracking-tight mb-6 max-w-2xl">
