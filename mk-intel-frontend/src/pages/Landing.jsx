@@ -5,7 +5,7 @@ import { examples } from '../api/client'
 const USE_CASES = ['Campaign targeting', 'Customer segmentation', 'Message testing', 'Market entry', 'Product positioning']
 
 const STATS = [
-  { val: '20M+', label: 'Population records', sub: 'Census & survey research' },
+  { val: '15M+', label: 'Population records', sub: 'Census & survey research' },
   { val: '7', label: 'Behavioral archetypes', sub: 'Clustering · profiling' },
   { val: '4-layer', label: 'Audience modeling', sub: 'Structural · Psych · Media · Behavioral' },
 ]
